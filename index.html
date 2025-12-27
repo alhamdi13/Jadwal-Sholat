@@ -214,7 +214,7 @@
                 const EqT = q / 15.0 - RA_final;
                 return { declination: Decl, equation: EqT };
             },
-            getTimes: (date, lat, lng, timeZone) => {
+            getTimes: (date, lat, lng, timeZone, offset = 0) => {
                 let year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
                 if (month <= 2) { year -= 1; month += 12; }
                 const A = Math.floor(year / 100);
@@ -244,11 +244,13 @@
                 const asrTime = PrayerCalc.r2d(Math.acos((Math.sin(asrAngle) - Math.sin(PrayerCalc.d2r(lat)) * Math.sin(PrayerCalc.d2r(D))) / (Math.cos(PrayerCalc.d2r(lat)) * Math.cos(PrayerCalc.d2r(D))))) / 15.0;
                 const asr = dhuhr + asrTime;
                 const format = (t) => {
+                    // Standard safety margin (ihtiyat) + user offset
+                    const safetyMargin = 2; // Standard in Indonesia
                     const time = PrayerCalc.fixHour(t + timeZone);
                     const hours = Math.floor(time);
                     const minutes = Math.floor((time - hours) * 60);
                     const d = new Date();
-                    d.setHours(hours, minutes + 2, 0); 
+                    d.setHours(hours, minutes + safetyMargin + offset, 0); 
                     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
                 };
                 return {
@@ -280,6 +282,18 @@
              } catch(e) { return null; }
         };
 
+        const fetchPrayerTimesFromAPI = async (lat, lng, month, year) => {
+            try {
+                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
+                if (!response.ok) throw new Error("Failed to fetch prayer times");
+                const data = await response.json();
+                return data.data; 
+            } catch (error) {
+                console.error("API Error:", error);
+                return null;
+            }
+        };
+
         // --- CONTEXT ---
         const SettingsContext = createContext();
 
@@ -300,7 +314,8 @@
                         mosqueName: "Masjid Al-Multazam",
                         theme: "emerald",
                         template: "classic", 
-                        iqamahDelay: 10
+                        iqamahDelay: 10,
+                        timeOffset: 0 // Minute offset
                     },
                     location: { city: "Jakarta Pusat, DKI Jakarta", lat: -6.1754, lng: 106.8272 },
                     appearance: { bgImage: defaultBg, customBg: null, slideshowActive: false, slideshowInterval: 10, opacity: 70, blur: 4 },
@@ -354,11 +369,15 @@
                 const calculate = () => {
                     const today = new Date();
                     const tzOffset = -today.getTimezoneOffset() / 60; 
-                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset);
+                    const offset = settings.general.timeOffset || 0;
+                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, offset);
                     setTodaysTimings(timings);
+                    const gregorianDate = new Date();
+                    const islamicDate = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {day: 'numeric', month: 'long', year: 'numeric'}).format(gregorianDate);
+                    setHijriDate(islamicDate);
                 };
                 calculate();
-            }, [settings.location.lat, settings.location.lng]);
+            }, [settings.location.lat, settings.location.lng, settings.general.timeOffset]);
 
             // DYNAMIC HIJRI DATE (MAGHRIB LOGIC)
             useEffect(() => {
