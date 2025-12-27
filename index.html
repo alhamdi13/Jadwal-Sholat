@@ -157,14 +157,30 @@
     <script type="text/babel">
         const { useState, useEffect, memo, useMemo, createContext, useContext, useRef } = React;
         const { createRoot } = ReactDOM;
-        const { MemoryRouter, Routes, Route, Link, useNavigate } = ReactRouterDOM;
+        // Use HashRouter for GitHub Pages compatibility
+        const { HashRouter, Routes, Route, Link, useNavigate } = ReactRouterDOM;
 
-        // --- FIREBASE SETUP ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // --- SAFE FIREBASE SETUP ---
+        let app = null;
+        let auth = null;
+        let db = null;
+        let appId = 'default-app-id';
+        let firebaseAvailable = false;
+
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                app = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                firebaseAvailable = true;
+            } else {
+                console.warn("Firebase config not found. Running in offline/demo mode.");
+            }
+        } catch (e) {
+            console.warn("Firebase initialization failed. Running in offline mode.", e);
+        }
 
         // --- PRAYER TIMES CALCULATION ENGINE (OFFLINE) ---
         const PrayerCalc = {
@@ -302,29 +318,30 @@
             const [todaysTimings, setTodaysTimings] = useState(null);
             const [hijriDate, setHijriDate] = useState("");
 
-            // Firebase Auth & Initial Tracking
+            // Firebase Auth & Initial Tracking (Conditional)
             useEffect(() => {
-                const initAuth = async () => {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await auth.signInWithCustomToken(__initial_auth_token);
-                    } else {
-                        await auth.signInAnonymously();
-                    }
-                };
-                initAuth();
-                const unsubscribe = auth.onAuthStateChanged((u) => {
-                    setUser(u);
-                    if (u) {
-                        // Log visit anonymously on startup
-                        const visitsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits');
-                        visitsRef.add({
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            uid: u.uid,
-                            device: navigator.userAgent
-                        });
-                    }
-                });
-                return () => unsubscribe();
+                if (firebaseAvailable && auth) {
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await auth.signInWithCustomToken(__initial_auth_token);
+                        } else {
+                            await auth.signInAnonymously();
+                        }
+                    };
+                    initAuth();
+                    const unsubscribe = auth.onAuthStateChanged((u) => {
+                        setUser(u);
+                        if (u && db) {
+                            const visitsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits');
+                            visitsRef.add({
+                                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                                uid: u.uid,
+                                device: navigator.userAgent
+                            }).catch(err => console.log("Tracking disabled offline"));
+                        }
+                    });
+                    return () => unsubscribe();
+                }
             }, []);
 
             useEffect(() => {
@@ -346,9 +363,9 @@
                 calculate();
             }, [settings.location.lat, settings.location.lng]);
 
-            // Track location update
+            // Track location update (Conditional)
             const trackLocationUpdate = (newCity, lat, lng) => {
-                if (user) {
+                if (firebaseAvailable && user && db) {
                     const locationsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations');
                     locationsRef.add({
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
@@ -356,17 +373,13 @@
                         city: newCity,
                         lat: lat,
                         lng: lng
-                    });
+                    }).catch(err => console.log("Tracking location disabled offline"));
                 }
             };
 
             const updateSettings = (section, key, value) => {
                 setSettings(prev => {
                     if (section === 'root') { return { ...prev, [key]: value }; }
-                    // If updating location, log it to cloud
-                    if (section === 'location' && key === 'city') {
-                        // We do this in the effect or component that calls it usually, but here is okay for simple tracking
-                    }
                     return { ...prev, [section]: { ...prev[section], [key]: value } };
                 });
             };
@@ -392,7 +405,7 @@
             };
 
             return (
-                <SettingsContext.Provider value={{ settings, updateSettings, toggleMute, handleImageUpload, slideshowImages, todaysTimings, hijriDate, trackLocationUpdate, user, db, appId }}>
+                <SettingsContext.Provider value={{ settings, updateSettings, toggleMute, handleImageUpload, slideshowImages, todaysTimings, hijriDate, trackLocationUpdate, user, db, appId, firebaseAvailable }}>
                     {children}
                 </SettingsContext.Provider>
             );
@@ -806,29 +819,33 @@
 
         const SettingsPage = () => {
             const navigate = useNavigate();
-            const { settings, updateSettings, handleImageUpload, trackLocationUpdate, user, db, appId } = useContext(SettingsContext);
+            const { settings, updateSettings, handleImageUpload, trackLocationUpdate, user, db, appId, firebaseAvailable } = useContext(SettingsContext);
             const fileInputRef = useRef(null);
             const [newRunningText, setNewRunningText] = useState("");
             const [isLoadingLocation, setIsLoadingLocation] = useState(false);
             const [visitStats, setVisitStats] = useState({ count: 0, locations: [] });
 
             useEffect(() => {
-                if (user) {
+                if (firebaseAvailable && user && db) {
                     const fetchStats = async () => {
-                        const visitsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits').get();
-                        const locationsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations').orderBy('timestamp', 'desc').limit(5).get();
-                        
-                        const locs = [];
-                        locationsSnapshot.forEach(doc => locs.push(doc.data()));
+                        try {
+                            const visitsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits').get();
+                            const locationsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations').orderBy('timestamp', 'desc').limit(5).get();
+                            
+                            const locs = [];
+                            locationsSnapshot.forEach(doc => locs.push(doc.data()));
 
-                        setVisitStats({
-                            count: visitsSnapshot.size,
-                            locations: locs
-                        });
+                            setVisitStats({
+                                count: visitsSnapshot.size,
+                                locations: locs
+                            });
+                        } catch (e) {
+                            console.log("Error fetching stats", e);
+                        }
                     };
                     fetchStats();
                 }
-            }, [user]);
+            }, [user, firebaseAvailable]);
 
             const themes = [
                 { id: 'emerald', name: 'Emerald', color: '#10b981' },
@@ -1071,7 +1088,7 @@
         const App = () => {
             return (
                 <SettingsProvider>
-                    <MemoryRouter>
+                    <HashRouter>
                         <Routes>
                             <Route path="/" element={<DashboardPage />} />
                             <Route path="/dua" element={<DuaPage />} />
@@ -1079,7 +1096,7 @@
                             <Route path="/schedule" element={<MonthlySchedulePage />} />
                             <Route path="/qibla" element={<QiblaPage />} />
                         </Routes>
-                    </MemoryRouter>
+                    </HashRouter>
                 </SettingsProvider>
             );
         };
