@@ -17,6 +17,11 @@
     <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
+    <!-- Firebase Dependencies -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
@@ -25,14 +30,11 @@
             theme: {
                 extend: {
                     colors: {
-                        "primary": "#10b981", // Emerald 500
-                        "primary-dark": "#047857", // Emerald 700
-                        "gold": "#fbbf24", // Amber 400
-                        "gold-dark": "#d97706", // Amber 600
-                        "background-light": "#f0fdf4",
-                        "background-dark": "#022c22", // Very dark emerald
-                        "surface-dark": "#064e3b",
-                        "surface-light": "#ffffff",
+                        primary: 'rgb(var(--color-primary) / <alpha-value>)',
+                        secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
+                        accent: 'rgb(var(--color-accent) / <alpha-value>)',
+                        "background-dark": "#0f172a", 
+                        "surface-dark": "rgb(var(--color-surface) / 0.8)",
                     },
                     fontFamily: {
                         "display": ["Plus Jakarta Sans", "sans-serif"],
@@ -48,10 +50,6 @@
                         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     },
                     keyframes: {
-                        marquee: {
-                            '0%': { transform: 'translateX(100%)' },
-                            '100%': { transform: 'translateX(-100%)' },
-                        },
                         fadeIn: {
                             '0%': { opacity: '0', transform: 'translateY(10px)' },
                             '100%': { opacity: '1', transform: 'translateY(0)' },
@@ -67,7 +65,54 @@
         }
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #020617;
+            color: white;
         }
+        
+        /* --- THEME VARIABLES --- */
+        :root {
+            /* Default: Emerald (Hijau Masjid) */
+            --color-primary: 16 185 129;   
+            --color-secondary: 6 95 70;    
+            --color-accent: 251 191 36;    
+            --color-surface: 2 44 34;      
+        }
+
+        body.theme-ocean {
+            --color-primary: 14 165 233;   
+            --color-secondary: 12 74 110;  
+            --color-accent: 56 189 248;    
+            --color-surface: 8 47 73;      
+        }
+
+        body.theme-sunset {
+            --color-primary: 249 115 22;   
+            --color-secondary: 124 45 18;  
+            --color-accent: 253 186 116;   
+            --color-surface: 67 20 7;      
+        }
+
+        body.theme-amethyst {
+            --color-primary: 168 85 247;   
+            --color-secondary: 88 28 135;  
+            --color-accent: 232 121 249;   
+            --color-surface: 59 7 100;     
+        }
+        
+        body.theme-midnight {
+            --color-primary: 99 102 241;   /* Indigo */
+            --color-secondary: 30 27 75;   /* Deep Indigo */
+            --color-accent: 226 232 240;   /* Silver */
+            --color-surface: 15 23 42;     /* Slate 900 */
+        }
+
+        body.theme-earth {
+            --color-primary: 132 204 22;   /* Lime */
+            --color-secondary: 63 98 18;   /* Olive */
+            --color-accent: 234 179 8;     /* Yellow */
+            --color-surface: 20 83 45;     /* Green 900 */
+        }
+
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -76,31 +121,37 @@
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: #047857; 
+            background: rgb(var(--color-secondary)); 
             border-radius: 3px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #10b981; 
+            background: rgb(var(--color-primary)); 
         }
         .compass-dial {
             transition: transform 0.5s cubic-bezier(0.4, 2, 0.55, 0.44);
         }
         .glass-panel {
-            background: rgba(6, 78, 59, 0.7);
+            background: rgba(var(--color-surface), 0.7);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(var(--color-accent), 0.2);
         }
-        .text-shadow-gold {
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 2px rgba(251, 191, 36, 0.5);
+        .text-shadow-accent {
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 2px rgba(var(--color-accent), 0.5);
         }
+        /* Arch Shape for Classic Template */
         .arch-shape {
             mask-image: radial-gradient(circle at 50% 120%, transparent 40%, black 41%);
             -webkit-mask-image: radial-gradient(circle at 50% 120%, transparent 40%, black 41%);
         }
+
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
     </style>
 </head>
-<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white transition-colors duration-500 overflow-x-hidden">
+<body class="bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -108,72 +159,108 @@
         const { createRoot } = ReactDOM;
         const { MemoryRouter, Routes, Route, Link, useNavigate } = ReactRouterDOM;
 
+        // --- FIREBASE SETUP ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- PRAYER TIMES CALCULATION ENGINE (OFFLINE) ---
+        const PrayerCalc = {
+            d2r: (d) => d * Math.PI / 180.0,
+            r2d: (r) => r * 180.0 / Math.PI,
+            fixHour: (a) => { a = a - 24.0 * Math.floor(a / 24.0); a = a < 0 ? a + 24.0 : a; return a; },
+            sunPosition: (jd) => {
+                const D = jd - 2451545.0;
+                const g = PrayerCalc.fixHour(357.529 + 0.98560028 * D);
+                const q = PrayerCalc.fixHour(280.459 + 0.98564736 * D);
+                const L = PrayerCalc.fixHour(q + 1.915 * Math.sin(PrayerCalc.d2r(g)) + 0.020 * Math.sin(PrayerCalc.d2r(2 * g)));
+                const R = 1.00014 - 0.01671 * Math.cos(PrayerCalc.d2r(g)) - 0.00014 * Math.cos(PrayerCalc.d2r(2 * g));
+                const e = 23.439 - 0.00000036 * D;
+                const RA = PrayerCalc.r2d(Math.atan2(Math.cos(PrayerCalc.d2r(e)) * Math.sin(PrayerCalc.d2r(L)), Math.cos(PrayerCalc.d2r(L)))) / 15.0;
+                const RA_L = PrayerCalc.fixHour(L / 15.0);
+                const RA_ = PrayerCalc.fixHour(RA);
+                const RA_final = RA_ + (RA_L - RA_); 
+                const Decl = PrayerCalc.r2d(Math.asin(Math.sin(PrayerCalc.d2r(e)) * Math.sin(PrayerCalc.d2r(L))));
+                const EqT = q / 15.0 - RA_final;
+                return { declination: Decl, equation: EqT };
+            },
+            getTimes: (date, lat, lng, timeZone) => {
+                let year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
+                if (month <= 2) { year -= 1; month += 12; }
+                const A = Math.floor(year / 100);
+                const B = 2 - A + Math.floor(A / 4);
+                const JD = Math.floor(365.25 * (year + 4716)) + Math.floor(30.6001 * (month + 1)) + day + B - 1524.5;
+                const sun = PrayerCalc.sunPosition(JD);
+                const D = sun.declination;
+                const EqT = sun.equation;
+                const fajrAngle = 20; 
+                const ishaAngle = 18;
+                const computeTime = (angle, mode) => {
+                   const P1 = -Math.sin(PrayerCalc.d2r(angle)) - Math.sin(PrayerCalc.d2r(lat)) * Math.sin(PrayerCalc.d2r(D));
+                   const P2 = Math.cos(PrayerCalc.d2r(lat)) * Math.cos(PrayerCalc.d2r(D));
+                   const V = Math.acos(P1 / P2) / 15.0;
+                   return PrayerCalc.r2d(V); 
+                };
+                const dhuhr = 12 + EqT - lng / 15;
+                const sunAngleTime = computeTime(0.833, 0); 
+                const sunrise = dhuhr - sunAngleTime;
+                const sunset = dhuhr + sunAngleTime;
+                const fajrTime = computeTime(fajrAngle, 1);
+                const ishaTime = computeTime(ishaAngle, 1);
+                const fajr = dhuhr - fajrTime;
+                const isha = dhuhr + ishaTime;
+                const noonShadow = Math.abs(lat - D);
+                const asrAngle = Math.atan(1 / (1 + Math.tan(PrayerCalc.d2r(noonShadow))));
+                const asrTime = PrayerCalc.r2d(Math.acos((Math.sin(asrAngle) - Math.sin(PrayerCalc.d2r(lat)) * Math.sin(PrayerCalc.d2r(D))) / (Math.cos(PrayerCalc.d2r(lat)) * Math.cos(PrayerCalc.d2r(D))))) / 15.0;
+                const asr = dhuhr + asrTime;
+                const format = (t) => {
+                    const time = PrayerCalc.fixHour(t + timeZone);
+                    const hours = Math.floor(time);
+                    const minutes = Math.floor((time - hours) * 60);
+                    const d = new Date();
+                    d.setHours(hours, minutes + 2, 0); 
+                    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+                };
+                return {
+                    Fajr: format(fajr),
+                    Sunrise: format(sunrise),
+                    Dhuhr: format(dhuhr),
+                    Asr: format(asr),
+                    Maghrib: format(sunset),
+                    Isha: format(isha)
+                };
+            }
+        };
+
         // --- API & UTILS ---
         const apiKey = ""; 
 
         const callGeminiAPI = async (prompt, systemInstruction = "") => {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemInstruction }] },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            arabic: { type: "STRING" },
-                            latin: { type: "STRING" },
-                            translation: { type: "STRING" },
-                            advice: { type: "STRING" }
-                        }
-                    }
-                }
-            };
-
-            const delays = [1000, 2000, 4000, 8000, 16000];
-            for (let i = 0; i < 5; i++) {
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
-                    let text = null;
-                    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts) {
-                        text = data.candidates[0].content.parts[0].text;
-                    }
-                    return JSON.parse(text);
-                } catch (error) {
-                    if (i === 4) throw error;
-                    await new Promise(resolve => setTimeout(resolve, delays[i]));
-                }
-            }
+             try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+                const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+                if (!response.ok) return null;
+                const data = await response.json();
+                return JSON.parse(data.candidates[0].content.parts[0].text);
+             } catch(e) { return null; }
         };
 
         const fetchPrayerTimesFromAPI = async (lat, lng, month, year) => {
             try {
-                // Fetch daily timings
-                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); // Method 20 is Kemenag Indonesia usually, or 2 for ISNA
+                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
                 if (!response.ok) throw new Error("Failed to fetch prayer times");
-                const data = await response.json();
-                return data.data; // Contains timings, date, meta
-            } catch (error) {
-                console.error("API Error:", error);
-                return null;
-            }
-        };
-
-        const fetchMonthlyPrayerTimesFromAPI = async (lat, lng, month, year) => {
-            try {
-                const response = await fetch(`https://api.aladhan.com/v1/calendar?latitude=${lat}&longitude=${lng}&method=20&month=${month}&year=${year}`);
-                if (!response.ok) throw new Error("Failed to fetch monthly times");
                 const data = await response.json();
                 return data.data; 
             } catch (error) {
                 console.error("API Error:", error);
-                return [];
+                return null;
             }
         };
 
@@ -189,12 +276,25 @@
         ];
 
         const SettingsProvider = ({ children }) => {
+            const [user, setUser] = useState(null);
             const [settings, setSettings] = useState(() => {
                 const saved = localStorage.getItem('muslimProSettings');
                 return saved ? JSON.parse(saved) : {
+                    general: {
+                        mosqueName: "Masjid Al-Multazam",
+                        theme: "emerald",
+                        template: "classic", 
+                        iqamahDelay: 10
+                    },
                     location: { city: "Jakarta Pusat, DKI Jakarta", lat: -6.1754, lng: 106.8272 },
                     appearance: { bgImage: defaultBg, customBg: null, slideshowActive: false, slideshowInterval: 10, opacity: 70, blur: 4 },
-                    runningText: { active: true, text: "Selamat datang di Masjid Raya. Mohon nonaktifkan HP saat sholat berlangsung.", speed: 5, size: "medium" }
+                    runningText: { 
+                        active: true, 
+                        texts: ["Selamat datang di Masjid.", "Mohon nonaktifkan HP saat sholat berlangsung.", "Jagalah kebersihan masjid."], 
+                        speed: 5, 
+                        size: "medium" 
+                    },
+                    audio: { isMuted: true } 
                 };
             });
 
@@ -202,24 +302,77 @@
             const [todaysTimings, setTodaysTimings] = useState(null);
             const [hijriDate, setHijriDate] = useState("");
 
+            // Firebase Auth & Initial Tracking
             useEffect(() => {
-                localStorage.setItem('muslimProSettings', JSON.stringify(settings));
-            }, [settings]);
-
-            // Fetch timings when location changes
-            useEffect(() => {
-                const getTimings = async () => {
-                    const data = await fetchPrayerTimesFromAPI(settings.location.lat, settings.location.lng);
-                    if (data) {
-                        setTodaysTimings(data.timings);
-                        setHijriDate(`${data.date.hijri.day} ${data.date.hijri.month.en} ${data.date.hijri.year}`);
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
                     }
                 };
-                getTimings();
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    setUser(u);
+                    if (u) {
+                        // Log visit anonymously on startup
+                        const visitsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits');
+                        visitsRef.add({
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                            uid: u.uid,
+                            device: navigator.userAgent
+                        });
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('muslimProSettings', JSON.stringify(settings));
+                document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden theme-${settings.general.theme}`;
+            }, [settings]);
+
+            // OFFLINE CALCULATION LOGIC
+            useEffect(() => {
+                const calculate = () => {
+                    const today = new Date();
+                    const tzOffset = -today.getTimezoneOffset() / 60; 
+                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset);
+                    setTodaysTimings(timings);
+                    const gregorianDate = new Date();
+                    const islamicDate = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {day: 'numeric', month: 'long', year: 'numeric'}).format(gregorianDate);
+                    setHijriDate(islamicDate);
+                };
+                calculate();
             }, [settings.location.lat, settings.location.lng]);
 
+            // Track location update
+            const trackLocationUpdate = (newCity, lat, lng) => {
+                if (user) {
+                    const locationsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations');
+                    locationsRef.add({
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        uid: user.uid,
+                        city: newCity,
+                        lat: lat,
+                        lng: lng
+                    });
+                }
+            };
+
             const updateSettings = (section, key, value) => {
-                setSettings(prev => ({ ...prev, [section]: { ...prev[section], [key]: value } }));
+                setSettings(prev => {
+                    if (section === 'root') { return { ...prev, [key]: value }; }
+                    // If updating location, log it to cloud
+                    if (section === 'location' && key === 'city') {
+                        // We do this in the effect or component that calls it usually, but here is okay for simple tracking
+                    }
+                    return { ...prev, [section]: { ...prev[section], [key]: value } };
+                });
+            };
+
+            const toggleMute = () => {
+                updateSettings('audio', 'isMuted', !settings.audio.isMuted);
             };
 
             const handleImageUpload = (file) => {
@@ -239,7 +392,7 @@
             };
 
             return (
-                <SettingsContext.Provider value={{ settings, updateSettings, handleImageUpload, slideshowImages, todaysTimings, hijriDate }}>
+                <SettingsContext.Provider value={{ settings, updateSettings, toggleMute, handleImageUpload, slideshowImages, todaysTimings, hijriDate, trackLocationUpdate, user, db, appId }}>
                     {children}
                 </SettingsContext.Provider>
             );
@@ -247,16 +400,16 @@
 
         // --- COMPONENTS ---
 
-        const ClockDisplay = memo(() => {
+        const ClockDisplay = memo(({ className }) => {
             const [time, setTime] = useState(new Date());
             useEffect(() => {
                 const timer = setInterval(() => setTime(new Date()), 1000);
                 return () => clearInterval(timer);
             }, []);
             return (
-                <div className="flex flex-col items-center md:items-end text-white">
-                    <div className="text-xs font-bold text-gold uppercase tracking-[0.2em] mb-1">Waktu Sekarang</div>
-                    <h2 className="text-5xl md:text-6xl font-serif font-bold text-white tabular-nums drop-shadow-gold tracking-tight">
+                <div className={`flex flex-col text-white ${className}`}>
+                    <div className="text-xs font-bold text-accent uppercase tracking-[0.2em] mb-1">Waktu Sekarang</div>
+                    <h2 className="text-5xl md:text-6xl font-serif font-bold text-white tabular-nums text-shadow-accent tracking-tight">
                         {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </h2>
                     <span className="text-lg font-light text-slate-200 tracking-widest">{time.toLocaleTimeString([], { second: '2-digit' })}</span>
@@ -264,7 +417,7 @@
             );
         });
 
-        const PrayerCountdown = memo(({ targetDate, nextPrayerName }) => {
+        const PrayerCountdown = memo(({ targetDate, nextPrayerName, status }) => {
             const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
             useEffect(() => {
@@ -285,58 +438,96 @@
             }, [targetDate]);
 
             const fmt = (n) => String(n).padStart(2, '0');
+            const isIqamah = status === 'iqamah';
 
             return (
-                <div className="flex flex-col items-center">
-                    <div className="text-gold text-sm font-bold uppercase tracking-widest mb-4">Menuju {nextPrayerName}</div>
-                    <div className="flex gap-4 text-center">
+                <div className="flex flex-col items-center w-full">
+                    <div className={`text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isIqamah ? 'text-red-400 animate-pulse' : 'text-accent'}`}>
+                        {isIqamah && <span className="material-symbols-outlined">timer</span>}
+                        Menuju {isIqamah ? `Iqomah ${nextPrayerName}` : nextPrayerName}
+                    </div>
+                    <div className="flex justify-center gap-4 text-center w-full">
                         <div className="flex flex-col">
-                            <span className="text-4xl sm:text-5xl font-bold font-serif text-white drop-shadow-md">{fmt(countdown.h)}</span>
-                            <span className="text-[10px] text-emerald-200 uppercase tracking-widest mt-1">Jam</span>
+                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.h)}</span>
+                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Jam</span>
                         </div>
-                        <span className="text-4xl sm:text-5xl font-serif text-gold/80 animate-pulse">:</span>
+                        <span className={`text-4xl sm:text-5xl font-serif animate-pulse ${isIqamah ? 'text-red-400' : 'text-accent/80'}`}>:</span>
                         <div className="flex flex-col">
-                            <span className="text-4xl sm:text-5xl font-bold font-serif text-white drop-shadow-md">{fmt(countdown.m)}</span>
-                            <span className="text-[10px] text-emerald-200 uppercase tracking-widest mt-1">Menit</span>
+                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.m)}</span>
+                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Menit</span>
                         </div>
-                        <span className="text-4xl sm:text-5xl font-serif text-gold/80 animate-pulse">:</span>
+                        <span className={`text-4xl sm:text-5xl font-serif animate-pulse ${isIqamah ? 'text-red-400' : 'text-accent/80'}`}>:</span>
                         <div className="flex flex-col">
-                            <span className="text-4xl sm:text-5xl font-bold font-serif text-white drop-shadow-md">{fmt(countdown.s)}</span>
-                            <span className="text-[10px] text-emerald-200 uppercase tracking-widest mt-1">Detik</span>
+                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.s)}</span>
+                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Detik</span>
                         </div>
                     </div>
                 </div>
             );
         });
 
-        const PrayerCard = memo(({ name, time, active, highlightColor }) => {
+        const PrayerCard = memo(({ name, time, active, status }) => {
+            const isIqamahWaiting = active && status === 'iqamah';
             return (
-                <div className={`relative overflow-hidden rounded-xl border transition-all duration-500 group ${active ? 'border-gold bg-gradient-to-b from-emerald-900/90 to-emerald-950/90 shadow-[0_0_30px_rgba(251,191,36,0.2)] scale-105 z-10' : 'border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20'}`}>
-                    {active && <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-gold to-transparent"></div>}
+                <div className={`relative overflow-hidden rounded-xl border transition-all duration-500 group 
+                    ${active 
+                        ? (isIqamahWaiting 
+                            ? 'border-red-500 bg-gradient-to-b from-red-900/90 to-red-950/90 shadow-[0_0_30px_rgba(239,68,68,0.3)] scale-105 z-10' 
+                            : 'border-accent bg-gradient-to-b from-secondary/90 to-surface-dark/90 shadow-[0_0_30px_rgba(var(--color-accent),0.2)] scale-105 z-10') 
+                        : 'border-white/10 bg-black/40 hover:bg-black/60 hover:border-white/20'}`}>
+                    
+                    {active && <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent ${isIqamahWaiting ? 'via-red-500' : 'via-accent'}`}></div>}
+                    
                     <div className="p-5 flex flex-col items-center text-center relative z-10">
-                        <span className={`text-sm font-bold uppercase tracking-widest mb-2 ${active ? 'text-gold' : 'text-slate-400 group-hover:text-slate-300'}`}>{name}</span>
+                        <span className={`text-sm font-bold uppercase tracking-widest mb-2 ${active ? (isIqamahWaiting ? 'text-red-300' : 'text-accent') : 'text-slate-400 group-hover:text-slate-300'}`}>{name}</span>
                         <span className={`text-2xl sm:text-3xl font-serif font-bold ${active ? 'text-white' : 'text-slate-200'}`}>{time}</span>
+                        {isIqamahWaiting && <span className="text-[10px] uppercase font-bold text-red-400 mt-1 animate-pulse">Menunggu Iqomah</span>}
                     </div>
-                    {/* Islamic Pattern Overlay */}
                     <div className="absolute inset-0 bg-islamic-pattern opacity-5 pointer-events-none"></div>
                 </div>
             );
         });
 
-        const RunningTextBanner = memo(({ active, text, speed, size }) => {
-            if (!active) return null;
+        const HadithSection = memo(() => (
+            <div className="lg:col-span-2 rounded-2xl bg-gradient-to-br from-surface-dark/95 to-background-dark/95 backdrop-blur-sm p-6 border border-white/10 flex items-center gap-6">
+                <div className="hidden sm:flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent border border-accent/20">
+                    <span className="material-symbols-outlined text-3xl">menu_book</span>
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold uppercase text-accent mb-2">Hadith of the Day</h4>
+                    <p className="text-lg font-medium text-white italic leading-relaxed">"The most beloved of deeds to Allah are those that are most consistent, even if they are small."</p>
+                    <p className="mt-2 text-sm text-slate-400">— Prophet Muhammad (PBUH) [Bukhari & Muslim]</p>
+                </div>
+            </div>
+        ));
+
+        const RunningTextBanner = memo(({ active, texts, speed, size }) => {
+            if (!active || !texts || texts.length === 0) return null;
+            
             const fontSizeClass = { small: "text-sm", medium: "text-base", large: "text-lg", xl: "text-xl" }[size] || "text-base";
-            const duration = 20 - (speed * 1.5); 
+            const duration = 40 - (speed * 3); 
+            const displayText = texts.join(" ••• ");
+
             return (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-emerald-950/95 backdrop-blur-md border-t border-emerald-800 h-12 flex items-center overflow-hidden shadow-2xl">
-                    <div className="flex items-center justify-center bg-gold text-emerald-950 font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">
+                <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dark backdrop-blur-md border-t border-white/10 h-12 flex items-center overflow-hidden shadow-2xl">
+                    <div className="flex items-center justify-center bg-accent text-black font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">
                         Info Masjid
                     </div>
                     <div className="flex-1 overflow-hidden relative h-full flex items-center">
-                        <div className="whitespace-nowrap absolute will-change-transform" style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite`, paddingLeft: '100%' }}>
-                            <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic`}>{text}</span>
+                        <div 
+                            className="whitespace-nowrap absolute will-change-transform flex items-center gap-8"
+                            style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite` }}
+                        >
+                           <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic`}>{displayText}</span>
+                           <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic pl-24`}>{displayText}</span> 
                         </div>
                     </div>
+                     <style>{`
+                        @keyframes marquee {
+                            0% { transform: translateX(100%); }
+                            100% { transform: translateX(-100%); }
+                        }
+                    `}</style>
                 </div>
             );
         });
@@ -344,52 +535,81 @@
         // --- PAGES ---
 
         const DashboardPage = () => {
-            const { settings, slideshowImages, todaysTimings, hijriDate } = useContext(SettingsContext);
+            const { settings, slideshowImages, todaysTimings, hijriDate, toggleMute } = useContext(SettingsContext);
             const [bgImage, setBgImage] = useState(settings.appearance.bgImage);
             const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
             const [nextPrayer, setNextPrayer] = useState(null);
+            
+            const template = settings.general.template || 'classic'; 
 
-            // Calculate next prayer based on LIVE data
+            // Audio Refs
+            const adhanAudioRef = useRef(new Audio("https://www.islamcan.com/audio/adhan/azan1.mp3"));
+            const iqamahAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
+
+            // Calculate next prayer AND Iqamah logic + SOUND TRIGGER
             useEffect(() => {
                 if (!todaysTimings) return;
 
                 const calculateNextPrayer = () => {
                     const now = new Date();
-                    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                    
                     const prayerOrder = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
                     let found = null;
-                    let targetDate = new Date();
+                    let target = new Date();
+                    let status = 'adhan'; 
+                    const iqamahDelay = settings.general.iqamahDelay || 10;
 
                     for (let name of prayerOrder) {
                         const timeStr = todaysTimings[name];
                         if (!timeStr) continue;
                         
                         const [h, m] = timeStr.split(':').map(Number);
-                        const prayerMinutes = h * 60 + m;
+                        const prayerTime = new Date();
+                        prayerTime.setHours(h, m, 0, 0);
+                        const iqamahTime = new Date(prayerTime.getTime() + iqamahDelay * 60000);
 
-                        if (prayerMinutes > nowMinutes) {
+                        const nowTs = now.getTime();
+                        
+                        if (!settings.audio.isMuted && name !== 'Sunrise') {
+                             if (Math.abs(nowTs - prayerTime.getTime()) < 1500) {
+                                 adhanAudioRef.current.play().catch(e => console.log("Audio play failed:", e));
+                             }
+                        }
+
+                        if (!settings.audio.isMuted && name !== 'Sunrise') {
+                             if (Math.abs(nowTs - iqamahTime.getTime()) < 1500) {
+                                 iqamahAudioRef.current.play().catch(e => console.log("Audio play failed:", e));
+                             }
+                        }
+
+                        if (now < prayerTime) {
                             found = { name, time: timeStr };
-                            targetDate.setHours(h, m, 0, 0);
+                            target = prayerTime;
+                            status = 'adhan';
+                            break;
+                        } else if (now < iqamahTime && name !== 'Sunrise') {
+                            found = { name, time: timeStr };
+                            target = iqamahTime;
+                            status = 'iqamah';
                             break;
                         }
                     }
 
-                    // If all passed, next is Fajr tomorrow
                     if (!found) {
                         found = { name: 'Fajr', time: todaysTimings['Fajr'] };
                         const [h, m] = found.time.split(':').map(Number);
-                        targetDate.setDate(targetDate.getDate() + 1);
-                        targetDate.setHours(h, m, 0, 0);
+                        target = new Date();
+                        target.setDate(target.getDate() + 1);
+                        target.setHours(h, m, 0, 0);
+                        status = 'adhan';
                     }
 
-                    setNextPrayer({ ...found, targetDate });
+                    setNextPrayer({ ...found, targetDate: target, status });
                 };
 
                 calculateNextPrayer();
-                const interval = setInterval(calculateNextPrayer, 60000); 
+                const interval = setInterval(calculateNextPrayer, 1000); 
                 return () => clearInterval(interval);
-            }, [todaysTimings]);
+            }, [todaysTimings, settings.general.iqamahDelay, settings.audio.isMuted]);
 
             // Slideshow
             useEffect(() => {
@@ -410,7 +630,6 @@
                 }
             }, [settings.appearance, currentSlideIndex]);
 
-            // Default dummy data if API not yet loaded
             const displayPrayers = todaysTimings ? [
                 { name: "Subuh", time: todaysTimings.Fajr },
                 { name: "Terbit", time: todaysTimings.Sunrise },
@@ -420,37 +639,154 @@
                 { name: "Isya", time: todaysTimings.Isha },
             ] : [];
 
+            // --- TEMPLATE RENDERING ---
+            const renderContent = () => {
+                switch(template) {
+                    case 'modern':
+                        return (
+                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full items-center">
+                                <div className="glass-panel p-8 rounded-3xl flex flex-col justify-center items-center text-center h-full">
+                                    <ClockDisplay className="items-center" />
+                                    <div className="mt-8 text-2xl font-serif text-slate-100">{hijriDate || "..."}</div>
+                                    <div className="mt-2 text-accent font-bold uppercase tracking-widest">
+                                        {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </div>
+                                </div>
+                                <div className={`glass-panel p-8 rounded-3xl flex flex-col justify-center items-center h-full ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
+                                    {nextPrayer && (
+                                        <PrayerCountdown 
+                                            targetDate={nextPrayer.targetDate} 
+                                            nextPrayerName={nextPrayer.name === 'Sunrise' ? 'Terbit' : nextPrayer.name} 
+                                            status={nextPrayer.status}
+                                        />
+                                    )}
+                                    {nextPrayer && nextPrayer.status === 'adhan' && (
+                                        <div className="mt-6 text-2xl font-bold text-white font-serif border border-white/20 px-6 py-2 rounded-full bg-black/20">
+                                            Adzan: {nextPrayer.time}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-6 gap-4 mt-4">
+                                     {displayPrayers.map((p) => {
+                                        const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
+                                        return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} />;
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    
+                    case 'simple':
+                        return (
+                            <div className="flex flex-col items-center justify-center h-full gap-12">
+                                <ClockDisplay className="items-center scale-125" />
+                                {nextPrayer && (
+                                    <div className="text-center">
+                                        <div className="text-6xl md:text-8xl font-black text-white font-serif drop-shadow-xl">
+                                             {nextPrayer.time}
+                                        </div>
+                                        <div className="text-2xl text-accent font-bold uppercase tracking-[0.3em] mt-4">
+                                            {nextPrayer.name}
+                                        </div>
+                                        {nextPrayer.status === 'iqamah' && <div className="text-red-400 font-bold animate-pulse mt-2 text-xl">IQOMAH</div>}
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap justify-center gap-4 opacity-80">
+                                     {displayPrayers.map((p) => (
+                                         <div key={p.name} className={`px-4 py-2 rounded-lg border ${nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit')) ? 'border-accent bg-accent/20 text-white' : 'border-white/10 bg-black/30 text-slate-400'}`}>
+                                            <span className="text-xs uppercase block">{p.name}</span>
+                                            <span className="font-bold">{p.time}</span>
+                                         </div>
+                                     ))}
+                                </div>
+                            </div>
+                        );
+
+                    case 'classic':
+                    default:
+                        return (
+                            <div className="flex flex-col gap-12">
+                                <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 pb-8 border-b border-white/10">
+                                    <div className="flex flex-col gap-2 text-center md:text-left">
+                                        <div className="flex items-center justify-center md:justify-start gap-2 text-accent">
+                                            <span className="material-symbols-outlined">calendar_month</span>
+                                            <span className="text-lg font-bold tracking-widest uppercase">
+                                                {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-2xl font-serif text-slate-100">{hijriDate || "Memuat Tanggal Hijriah..."}</p>
+                                    </div>
+                                    <ClockDisplay className="items-end" />
+                                </div>
+
+                                <div className={`relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group transition-colors duration-500 ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
+                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-24 bg-gradient-to-b from-white/5 to-transparent rounded-b-full blur-xl pointer-events-none"></div>
+                                    <div className="relative z-10 flex flex-col items-center gap-8">
+                                        {nextPrayer ? (
+                                            <React.Fragment>
+                                                <PrayerCountdown 
+                                                    targetDate={nextPrayer.targetDate} 
+                                                    nextPrayerName={nextPrayer.name === 'Sunrise' ? 'Terbit' : nextPrayer.name} 
+                                                    status={nextPrayer.status}
+                                                />
+                                                {nextPrayer.status === 'adhan' && (
+                                                    <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-black/30 border border-white/10 backdrop-blur-md">
+                                                        <span className="text-slate-300 text-sm">Waktu Adzan:</span>
+                                                        <span className="text-xl font-bold text-white font-serif">{nextPrayer.time}</span>
+                                                    </div>
+                                                )}
+                                            </React.Fragment>
+                                        ) : (
+                                            <div className="animate-pulse text-primary/80">Menghitung waktu sholat...</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                    {displayPrayers.map((p) => {
+                                        const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
+                                        return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} />;
+                                    })}
+                                </div>
+                                <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    <HadithSection />
+                                </section>
+                            </div>
+                        );
+                }
+            };
+
             return (
                 <div className="relative z-10 flex min-h-screen w-full flex-col overflow-x-hidden font-display pb-16 text-white">
-                    {/* Background */}
                     <div className="fixed inset-0 z-0 bg-black">
                         <div className="absolute inset-0 bg-cover bg-center transition-all duration-[2000ms]" style={{ backgroundImage: `url("${bgImage}")`, filter: `blur(${settings.appearance.blur}px)` }}></div>
-                        <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/80 via-emerald-900/60 to-emerald-950/90" style={{ opacity: settings.appearance.opacity / 100 }}></div>
+                        <div className="absolute inset-0 bg-gradient-to-b from-surface-dark/80 via-background-dark/60 to-surface-dark/90" style={{ opacity: settings.appearance.opacity / 100 }}></div>
                         <div className="absolute inset-0 bg-islamic-pattern opacity-10"></div>
                     </div>
 
                     <div className="relative z-10 flex flex-col min-h-screen">
-                        {/* Header */}
-                        <header className="w-full border-b border-white/10 bg-gradient-to-b from-emerald-950/80 to-transparent backdrop-blur-sm">
+                        <header className="w-full border-b border-white/10 bg-gradient-to-b from-surface-dark/90 to-transparent backdrop-blur-sm">
                             <div className="px-6 lg:px-12 py-5 flex items-center justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className="flex items-center justify-center size-12 rounded-xl bg-gold/10 text-gold border border-gold/30 shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                                    <div className="flex items-center justify-center size-12 rounded-xl bg-accent/10 text-accent border border-accent/30 shadow-[0_0_15px_rgba(var(--color-accent),0.3)]">
                                         <span className="material-symbols-outlined text-3xl">mosque</span>
                                     </div>
                                     <div className="flex flex-col">
-                                        <h2 className="text-xl font-bold tracking-tight text-white font-serif">Al-Multazam</h2>
-                                        <p className="text-xs text-emerald-200 tracking-wider uppercase">Prayer Dashboard</p>
+                                        <h2 className="text-xl font-bold tracking-tight text-white font-serif">{settings.general.mosqueName}</h2>
+                                        <p className="text-xs text-primary/80 tracking-wider uppercase">Prayer Dashboard</p>
                                     </div>
                                 </div>
                                 <div className="hidden md:flex items-center gap-6">
-                                     <nav className="flex items-center gap-6 text-sm font-medium text-emerald-100/80">
-                                        <Link className="hover:text-gold transition-colors" to="/">Dashboard</Link>
-                                        <Link className="hover:text-gold transition-colors" to="/schedule">Jadwal</Link>
-                                        <Link className="hover:text-gold transition-colors" to="/qibla">Kiblat</Link>
-                                        <Link className="hover:text-gold transition-colors" to="/dua">Doa</Link>
+                                     <nav className="flex items-center gap-6 text-sm font-medium text-slate-200">
+                                        <Link className="hover:text-accent transition-colors" to="/">Dashboard</Link>
+                                        <Link className="hover:text-accent transition-colors" to="/schedule">Jadwal</Link>
+                                        <Link className="hover:text-accent transition-colors" to="/qibla">Kiblat</Link>
+                                        <Link className="hover:text-accent transition-colors" to="/dua">Doa</Link>
                                     </nav>
-                                    <Link to="/settings" className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-gold/50 transition-all group">
-                                        <span className="material-symbols-outlined text-gold group-hover:animate-spin">settings</span>
+                                    <button onClick={toggleMute} className={`flex items-center justify-center size-10 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}>
+                                        <span className="material-symbols-outlined">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span>
+                                    </button>
+                                    <Link to="/settings" className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-accent/50 transition-all group">
+                                        <span className="material-symbols-outlined text-accent group-hover:animate-spin">settings</span>
                                         <span className="text-sm font-medium">{settings.location.city}</span>
                                     </Link>
                                 </div>
@@ -458,87 +794,73 @@
                         </header>
 
                         <main className="flex-1 px-4 sm:px-8 lg:px-12 py-8 flex flex-col justify-center">
-                            <div className="mx-auto max-w-7xl w-full flex flex-col gap-12">
-                                
-                                {/* Top Section: Date & Clock */}
-                                <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 pb-8 border-b border-white/10">
-                                    <div className="flex flex-col gap-2 text-center md:text-left">
-                                        <div className="flex items-center justify-center md:justify-start gap-2 text-gold">
-                                            <span className="material-symbols-outlined">calendar_month</span>
-                                            <span className="text-lg font-bold tracking-widest uppercase">
-                                                {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                            </span>
-                                        </div>
-                                        <p className="text-2xl font-serif text-emerald-100">{hijriDate || "Memuat Tanggal Hijriah..."}</p>
-                                    </div>
-                                    <ClockDisplay />
-                                </div>
-
-                                {/* Hero Section: Countdown */}
-                                <div className="relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group">
-                                    {/* Decorative Arch */}
-                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-24 bg-gradient-to-b from-white/5 to-transparent rounded-b-full blur-xl pointer-events-none"></div>
-                                    
-                                    <div className="relative z-10 flex flex-col items-center gap-8">
-                                        {nextPrayer ? (
-                                            <React.Fragment>
-                                                <PrayerCountdown targetDate={nextPrayer.targetDate} nextPrayerName={nextPrayer.name === 'Sunrise' ? 'Terbit' : nextPrayer.name} />
-                                                <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-black/30 border border-white/10 backdrop-blur-md">
-                                                    <span className="text-slate-300 text-sm">Waktu Adzan:</span>
-                                                    <span className="text-xl font-bold text-white font-serif">{nextPrayer.time}</span>
-                                                </div>
-                                            </React.Fragment>
-                                        ) : (
-                                            <div className="animate-pulse text-emerald-200">Menghitung waktu sholat...</div>
-                                        )}
-                                        
-                                        <div className="flex gap-4 mt-2">
-                                            <Link to="/dua" className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/50 transition-all hover:-translate-y-1 flex items-center gap-2">
-                                                <span className="material-symbols-outlined">menu_book</span>
-                                                Baca Doa
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Prayer Cards */}
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                                    {displayPrayers.map((p) => {
-                                        const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
-                                        return (
-                                            <PrayerCard 
-                                                key={p.name}
-                                                name={p.name} 
-                                                time={p.time} 
-                                                active={isNext}
-                                            />
-                                        );
-                                    })}
-                                </div>
-
+                            <div className="mx-auto max-w-7xl w-full">
+                                {renderContent()}
                             </div>
                         </main>
                     </div>
-                    <RunningTextBanner active={settings.runningText.active} text={settings.runningText.text} speed={settings.runningText.speed} size={settings.runningText.size} />
+                    <RunningTextBanner active={settings.runningText.active} texts={settings.runningText.texts} speed={settings.runningText.speed} size={settings.runningText.size} />
                 </div>
             );
         };
 
         const SettingsPage = () => {
             const navigate = useNavigate();
-            const { settings, updateSettings, handleImageUpload } = useContext(SettingsContext);
+            const { settings, updateSettings, handleImageUpload, trackLocationUpdate, user, db, appId } = useContext(SettingsContext);
             const fileInputRef = useRef(null);
+            const [newRunningText, setNewRunningText] = useState("");
             const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+            const [visitStats, setVisitStats] = useState({ count: 0, locations: [] });
 
-            const backgrounds = [
-                { id: 'default', name: 'Masjid', url: "https://lh3.googleusercontent.com/aida-public/AB6AXuAOrQLKRUmFQhPxWSXwhFKntvqt5JvcRPZHSGEfJ6534s7zRxMYnhaVjiPPkQb1dSZerTsg6wuTZGGxx3ldiOsjAcwCPu5eXkl9Sh31aJykos91Vq4LS-XOvIdMt9-Lk2PEZSEb3Yy8MYY89dlvY-l8Bpgmn5aJs7P3TRtrwUCaytrFFcAo64P_Bl8hcaxQGUjEsNHbGrRYLfi8MNrFtYTDY-_FVk1V8cUKnIvDDK-pdMtl2WtaznRR5qWi3vmydcqQv2gcQj8jrVk" },
-                { id: 'masjid1', name: 'Interior', url: "https://lh3.googleusercontent.com/aida-public/AB6AXuAIQlg9ExURoitbx-siETAk3sji_tYFU2RD2Wb3QHdPwd1H6L68cqmXzKWR48SuW5Q1TgJGbybsbWl77ODKERMY87uU11t43rTCxDRFLaaLxIUir7qXgGhdx1vRzV902TIJpEfXx1RcIX0zVXIdFXNiLLEZOafUijcZfxhvHebu9MTR6EPT6CCadKdhe1-er33j3KC7ryz7jTrysoFFBsT_XX5k4Ny-U6lVS5v63bPOkh4wK6p1Ix4_BXrPe-AwspexXFcJIaDQFHo" },
-                { id: 'masjid2', name: 'Senja', url: "https://lh3.googleusercontent.com/aida-public/AB6AXuB2LoTTl_o0k-4Xw86X_LRqqxQIicJpI1M_7AHxoPXjYwPEROPNoYl6t12YQuZKgb2YJFYswu81I8cZd7OmIRIRlQCn362IBxm6m--IkVU78Ndk1m7TSXg7veU9tbE49Um5uhUTf2rGHWHfBM5g19xmfd6tq9z3iE4kO9TUZCzJR4sKlL9t5agvMP6fAgbP2dV8q8thdKo3cReM04o95GiRAw5JhKgj1cWWMj6tFTxbtNBeBwDhpACJ_4Ne5MOe79ED9n1fH_b6YTw" }
+            useEffect(() => {
+                if (user) {
+                    const fetchStats = async () => {
+                        const visitsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits').get();
+                        const locationsSnapshot = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations').orderBy('timestamp', 'desc').limit(5).get();
+                        
+                        const locs = [];
+                        locationsSnapshot.forEach(doc => locs.push(doc.data()));
+
+                        setVisitStats({
+                            count: visitsSnapshot.size,
+                            locations: locs
+                        });
+                    };
+                    fetchStats();
+                }
+            }, [user]);
+
+            const themes = [
+                { id: 'emerald', name: 'Emerald', color: '#10b981' },
+                { id: 'ocean', name: 'Ocean', color: '#0ea5e9' },
+                { id: 'sunset', name: 'Sunset', color: '#f97316' },
+                { id: 'amethyst', name: 'Amethyst', color: '#a855f7' },
+                { id: 'midnight', name: 'Midnight', color: '#6366f1' },
+                { id: 'earth', name: 'Earth', color: '#84cc16' }
+            ];
+
+            const templates = [
+                { id: 'classic', name: 'Classic (Kubah)', icon: 'church' },
+                { id: 'modern', name: 'Modern (Split)', icon: 'grid_view' },
+                { id: 'simple', name: 'Simple (Minimal)', icon: 'crop_square' }
             ];
 
             const onFileChange = async (e) => {
                 const file = e.target.files[0];
                 if (file) { await handleImageUpload(file); }
+            };
+
+            const addRunningText = () => {
+                if (newRunningText.trim()) {
+                    const updatedTexts = [...(settings.runningText.texts || []), newRunningText];
+                    updateSettings('runningText', 'texts', updatedTexts);
+                    setNewRunningText("");
+                }
+            };
+
+            const removeRunningText = (index) => {
+                const updatedTexts = settings.runningText.texts.filter((_, i) => i !== index);
+                updateSettings('runningText', 'texts', updatedTexts);
             };
 
             const handleAutoLocation = () => {
@@ -565,8 +887,10 @@
                             const data = await response.json();
                             const city = data.address.city || data.address.town || "Lokasi Terdeteksi";
                             updateSettings('location', 'city', city);
+                            trackLocationUpdate(city, latitude, longitude);
                         } catch (error) {
                             updateSettings('location', 'city', `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+                            trackLocationUpdate("Unknown", latitude, longitude);
                         } finally { setIsLoadingLocation(false); }
                     }, (error) => { useMockLocation("Izin ditolak atau error."); }, { enableHighAccuracy: false, timeout: 5000 });
                 } catch (e) { useMockLocation("Error sistem."); }
@@ -575,60 +899,148 @@
             return (
                 <div className="bg-background-dark font-display min-h-screen flex flex-col text-white">
                     <header className="border-b border-white/10 px-6 py-4 bg-surface-dark flex items-center justify-between sticky top-0 z-50">
-                        <h2 className="text-xl font-bold font-serif text-gold">Pengaturan</h2>
-                        <Link to="/" className="text-sm font-medium hover:text-gold transition-colors">Kembali ke Dashboard</Link>
+                        <h2 className="text-xl font-bold font-serif text-accent">Pengaturan</h2>
+                        <Link to="/" className="text-sm font-medium hover:text-accent transition-colors">Kembali ke Dashboard</Link>
                     </header>
                     <main className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full flex flex-col gap-8">
-                        <section className="bg-surface-dark/50 border border-white/5 rounded-2xl p-6">
-                            <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2"><span className="material-symbols-outlined">location_on</span>Lokasi</h3>
+                        {/* GENERAL SETTINGS */}
+                        <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
+                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">settings</span>Umum</h3>
                             <div className="flex flex-col gap-4">
-                                <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-gold outline-none transition-colors" value={settings.location.city} onChange={(e) => updateSettings('location', 'city', e.target.value)} placeholder="Nama Kota"/>
-                                <button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-lg font-bold transition-all disabled:opacity-50">
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-medium text-slate-300">Nama Masjid</span>
+                                    <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" 
+                                           value={settings.general.mosqueName} 
+                                           onChange={(e) => updateSettings('general', 'mosqueName', e.target.value)} 
+                                           placeholder="Contoh: Masjid Al-Ikhlas"/>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-medium text-slate-300">Jeda Iqomah (Menit)</span>
+                                    <input type="number" min="1" max="60"
+                                           className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" 
+                                           value={settings.general.iqamahDelay} 
+                                           onChange={(e) => updateSettings('general', 'iqamahDelay', parseInt(e.target.value) || 10)} 
+                                           />
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-medium text-slate-300">Tema Warna</span>
+                                    <div className="flex gap-4 flex-wrap">
+                                        {themes.map(theme => (
+                                            <button 
+                                                key={theme.id}
+                                                onClick={() => updateSettings('general', 'theme', theme.id)}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-full border ${settings.general.theme === theme.id ? 'border-accent bg-white/10' : 'border-white/10 bg-transparent'} transition-all`}
+                                            >
+                                                <div className="w-4 h-4 rounded-full" style={{backgroundColor: theme.color}}></div>
+                                                <span className="text-sm">{theme.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </label>
+                                <label className="flex flex-col gap-2">
+                                    <span className="text-sm font-medium text-slate-300">Template Tampilan</span>
+                                    <div className="flex gap-4 flex-wrap">
+                                        {templates.map(tmpl => (
+                                            <button 
+                                                key={tmpl.id}
+                                                onClick={() => updateSettings('general', 'template', tmpl.id)}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${settings.general.template === tmpl.id ? 'border-accent bg-white/10 text-accent' : 'border-white/10 bg-transparent text-slate-400'} transition-all`}
+                                            >
+                                                <span className="material-symbols-outlined">{tmpl.icon}</span>
+                                                <span className="text-sm">{tmpl.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </label>
+                            </div>
+                        </section>
+
+                        <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
+                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">location_on</span>Lokasi</h3>
+                            <div className="flex flex-col gap-4">
+                                <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.city} onChange={(e) => updateSettings('location', 'city', e.target.value)} placeholder="Nama Kota"/>
+                                <button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-primary hover:bg-secondary py-3 rounded-lg font-bold transition-all disabled:opacity-50 text-white">
                                     {isLoadingLocation ? <span className="animate-spin material-symbols-outlined">progress_activity</span> : <span className="material-symbols-outlined">my_location</span>}
                                     {isLoadingLocation ? 'Mendeteksi...' : 'Deteksi Otomatis'}
                                 </button>
                             </div>
                         </section>
-                         <section className="bg-surface-dark/50 border border-white/5 rounded-2xl p-6">
-                            <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2"><span className="material-symbols-outlined">palette</span>Tampilan</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                                {backgrounds.map(bg => (
-                                    <div key={bg.id} onClick={() => { updateSettings('appearance', 'bgImage', bg.url); updateSettings('appearance', 'slideshowActive', false); }} 
-                                        className={`cursor-pointer rounded-lg overflow-hidden border-2 aspect-video relative group ${settings.appearance.bgImage === bg.url && !settings.appearance.slideshowActive ? 'border-gold' : 'border-transparent'}`}>
-                                        <div className="absolute inset-0 bg-cover bg-center" style={{backgroundImage: `url("${bg.url}")`}}></div>
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-xs font-bold">{bg.name}</span></div>
+
+                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
+                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">subtitles</span>Running Text</h3>
+                            
+                            <div className="flex flex-col gap-4 mb-4">
+                                {settings.runningText.texts && settings.runningText.texts.map((txt, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center bg-black/20 p-2 rounded-lg">
+                                        <div className="flex-1 text-sm text-slate-300">{txt}</div>
+                                        <button onClick={() => removeRunningText(idx)} className="text-red-400 hover:text-red-300"><span className="material-symbols-outlined text-lg">delete</span></button>
                                     </div>
                                 ))}
-                                <div onClick={() => fileInputRef.current.click()} className="cursor-pointer rounded-lg border-2 border-dashed border-white/20 hover:border-gold flex flex-col items-center justify-center aspect-video gap-2 transition-colors">
-                                    <span className="material-symbols-outlined text-2xl">upload</span>
-                                    <span className="text-xs">Upload</span>
-                                    <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden"/>
-                                </div>
                             </div>
-                        </section>
-                         <section className="bg-surface-dark/50 border border-white/5 rounded-2xl p-6">
-                            <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2"><span className="material-symbols-outlined">subtitles</span>Running Text</h3>
-                            <textarea className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-gold outline-none transition-colors h-24 mb-4" value={settings.runningText.text} onChange={(e) => updateSettings('runningText', 'text', e.target.value)}></textarea>
+
+                            <div className="flex gap-2 mb-4">
+                                <input 
+                                    className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 focus:border-accent outline-none transition-colors text-sm" 
+                                    value={newRunningText} 
+                                    onChange={(e) => setNewRunningText(e.target.value)}
+                                    placeholder="Tambah teks baru..."
+                                    onKeyPress={(e) => e.key === 'Enter' && addRunningText()}
+                                />
+                                <button onClick={addRunningText} className="bg-primary hover:bg-secondary px-4 py-2 rounded-lg text-white"><span className="material-symbols-outlined">add</span></button>
+                            </div>
+
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-slate-400">Aktifkan</span>
-                                <input type="checkbox" checked={settings.runningText.active} onChange={(e) => updateSettings('runningText', 'active', e.target.checked)} className="accent-gold w-5 h-5"/>
+                                <input type="checkbox" checked={settings.runningText.active} onChange={(e) => updateSettings('runningText', 'active', e.target.checked)} className="accent-accent w-5 h-5"/>
                             </div>
+                        </section>
+
+                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
+                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">palette</span>Background</h3>
+                            <div onClick={() => fileInputRef.current.click()} className="cursor-pointer rounded-lg border-2 border-dashed border-white/20 hover:border-accent flex flex-col items-center justify-center aspect-video gap-2 transition-colors bg-black/20">
+                                <span className="material-symbols-outlined text-2xl text-accent">upload</span>
+                                <span className="text-xs">Upload Gambar Sendiri</span>
+                                <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden"/>
+                            </div>
+                        </section>
+
+                        {/* STATS SECTION */}
+                        <section className="bg-surface-dark border border-white/5 rounded-2xl p-6 opacity-75 hover:opacity-100 transition-opacity">
+                             <h3 className="text-lg font-bold text-accent mb-4 flex items-center gap-2"><span className="material-symbols-outlined">analytics</span>Statistik Pengguna</h3>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-black/20 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                                    <span className="text-4xl font-bold text-white mb-2">{visitStats.count}</span>
+                                    <span className="text-sm text-slate-400">Total Kunjungan Aplikasi</span>
+                                </div>
+                                <div className="bg-black/20 p-4 rounded-xl">
+                                    <h4 className="text-sm font-bold text-slate-300 mb-3 border-b border-white/10 pb-2">Lokasi Terakhir Terdeteksi</h4>
+                                    <div className="flex flex-col gap-2">
+                                        {visitStats.locations.length > 0 ? visitStats.locations.map((loc, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs">
+                                                <span className="text-primary truncate max-w-[70%]">{loc.city}</span>
+                                                <span className="text-slate-500">Baru saja</span>
+                                            </div>
+                                        )) : <span className="text-xs text-slate-500 italic">Belum ada data lokasi GPS</span>}
+                                    </div>
+                                </div>
+                             </div>
+                             <p className="text-[10px] text-slate-500 mt-4 text-center">* Data ini anonim dan hanya mencatat jika pengguna mengaktifkan fitur lokasi otomatis.</p>
                         </section>
                     </main>
                 </div>
             );
         };
 
-        // Reuse Previous Components for DuaPage, QiblaPage, MonthlySchedulePage (Simplified for brevity but assumed present)
+        // Reuse Previous Components
         const DuaPage = () => { const navigate = useNavigate(); const [activeTab, setActiveTab] = useState('daily'); return (
             <div className="bg-background-dark min-h-screen text-white flex flex-col">
-                <header className="p-4 border-b border-white/10 flex justify-between items-center"><h1 className="text-xl font-serif text-gold">Doa & Dzikir</h1><Link to="/" className="text-sm hover:text-gold">Kembali</Link></header>
+                <header className="p-4 border-b border-white/10 flex justify-between items-center"><h1 className="text-xl font-serif text-accent">Doa & Dzikir</h1><Link to="/" className="text-sm hover:text-accent">Kembali</Link></header>
                 <main className="p-6 max-w-3xl mx-auto w-full">
-                    <div className="flex gap-2 mb-6"><button onClick={()=>setActiveTab('daily')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab==='daily'?'bg-emerald-600 text-white':'bg-white/5'}`}>Harian</button><button onClick={()=>setActiveTab('ai')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab==='ai'?'bg-emerald-600 text-white':'bg-white/5'}`}>AI Finder ✨</button></div>
+                    <div className="flex gap-2 mb-6"><button onClick={()=>setActiveTab('daily')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab==='daily'?'bg-primary text-white':'bg-white/5'}`}>Harian</button><button onClick={()=>setActiveTab('ai')} className={`flex-1 py-2 rounded-lg font-medium ${activeTab==='ai'?'bg-primary text-white':'bg-white/5'}`}>AI Finder ✨</button></div>
                     {activeTab === 'ai' ? <AIDuaGenerator/> : (
                         <div className="bg-surface-dark border border-white/5 rounded-xl p-6 text-center">
                             <h2 className="font-arabic text-3xl mb-4">اللَّهُمَّ رَبَّ هَذِهِ الدَّعْوَةِ التَّامَّةِ...</h2>
-                            <p className="text-emerald-400 italic mb-2">Allahumma Rabba hadzihid-da'watit-tammah...</p>
+                            <p className="text-primary italic mb-2">Allahumma Rabba hadzihid-da'watit-tammah...</p>
                             <p className="text-slate-300 text-sm">"Ya Allah, Tuhan yang memiliki panggilan ini..."</p>
                         </div>
                     )}
@@ -638,20 +1050,20 @@
 
         const QiblaPage = () => { const navigate = useNavigate(); return (
              <div className="bg-background-dark min-h-screen text-white flex flex-col items-center justify-center relative">
-                <Link to="/" className="absolute top-6 left-6 z-10 text-sm hover:text-gold flex items-center gap-1"><span className="material-symbols-outlined">arrow_back</span>Kembali</Link>
+                <Link to="/" className="absolute top-6 left-6 z-10 text-sm hover:text-accent flex items-center gap-1"><span className="material-symbols-outlined">arrow_back</span>Kembali</Link>
                 <div className="relative size-80 flex items-center justify-center">
                     <div className="absolute inset-0 border-4 border-white/10 rounded-full"></div>
                     <div className="absolute top-0 text-red-500 font-bold">N</div>
-                    <div className="w-1 h-32 bg-gradient-to-t from-gold to-transparent absolute bottom-1/2 origin-bottom rotate-[295deg]"></div>
-                    <span className="material-symbols-outlined text-4xl text-gold absolute" style={{transform: 'rotate(295deg) translateY(-140px)'}}>kaaba</span>
-                    <div className="text-center mt-96"><h2 className="text-2xl font-serif text-gold">295°</h2><p className="text-slate-400 text-sm">Arah Kiblat dari Jakarta</p></div>
+                    <div className="w-1 h-32 bg-gradient-to-t from-accent to-transparent absolute bottom-1/2 origin-bottom rotate-[295deg]"></div>
+                    <span className="material-symbols-outlined text-4xl text-accent absolute" style={{transform: 'rotate(295deg) translateY(-140px)'}}>kaaba</span>
+                    <div className="text-center mt-96"><h2 className="text-2xl font-serif text-accent">295°</h2><p className="text-slate-400 text-sm">Arah Kiblat dari Jakarta</p></div>
                 </div>
             </div>
         )};
 
         const MonthlySchedulePage = () => { const navigate = useNavigate(); return (
             <div className="bg-background-dark min-h-screen text-white p-6">
-                <header className="flex justify-between items-center mb-8"><h1 className="text-xl font-serif text-gold">Jadwal Bulanan</h1><Link to="/" className="text-sm hover:text-gold">Kembali</Link></header>
+                <header className="flex justify-between items-center mb-8"><h1 className="text-xl font-serif text-accent">Jadwal Bulanan</h1><Link to="/" className="text-sm hover:text-accent">Kembali</Link></header>
                 <div className="bg-surface-dark border border-white/5 rounded-xl overflow-hidden"><div className="p-4 text-center text-slate-400">Jadwal lengkap bulan ini akan tampil disini sesuai lokasi.</div></div>
             </div>
         )};
