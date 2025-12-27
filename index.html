@@ -280,18 +280,6 @@
              } catch(e) { return null; }
         };
 
-        const fetchPrayerTimesFromAPI = async (lat, lng, month, year) => {
-            try {
-                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
-                if (!response.ok) throw new Error("Failed to fetch prayer times");
-                const data = await response.json();
-                return data.data; 
-            } catch (error) {
-                console.error("API Error:", error);
-                return null;
-            }
-        };
-
         // --- CONTEXT ---
         const SettingsContext = createContext();
 
@@ -368,14 +356,40 @@
                     const tzOffset = -today.getTimezoneOffset() / 60; 
                     const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset);
                     setTodaysTimings(timings);
-                    const gregorianDate = new Date();
-                    const islamicDate = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {day: 'numeric', month: 'long', year: 'numeric'}).format(gregorianDate);
-                    setHijriDate(islamicDate);
                 };
                 calculate();
             }, [settings.location.lat, settings.location.lng]);
 
-            // Track location update (Conditional)
+            // DYNAMIC HIJRI DATE (MAGHRIB LOGIC)
+            useEffect(() => {
+                if (!todaysTimings) return;
+                
+                const updateHijri = () => {
+                    const now = new Date();
+                    const [h, m] = todaysTimings.Maghrib.split(':').map(Number);
+                    const maghribTime = new Date();
+                    maghribTime.setHours(h, m, 0, 0);
+
+                    // Check if Maghrib passed
+                    const hijriBaseDate = new Date();
+                    if (now >= maghribTime) {
+                        hijriBaseDate.setDate(hijriBaseDate.getDate() + 1);
+                    }
+
+                    const formatted = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {
+                        day: 'numeric', 
+                        month: 'long', 
+                        year: 'numeric'
+                    }).format(hijriBaseDate);
+                    
+                    setHijriDate(formatted);
+                };
+
+                updateHijri();
+                const interval = setInterval(updateHijri, 60000);
+                return () => clearInterval(interval);
+            }, [todaysTimings]);
+
             const trackLocationUpdate = (newCity, lat, lng) => {
                 if (firebaseAvailable && user && db) {
                     const locationsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations');
@@ -557,47 +571,36 @@
             );
         });
 
-        // --- NEW COMPONENT: ISLAMIC EVENTS PAGE ---
-        const IslamicEventsPage = () => {
-            const navigate = useNavigate();
-            const { hijriDate } = useContext(SettingsContext);
+        // --- NEW COMPONENT: Next Event Widget for Dashboard ---
+        const NextEventWidget = memo(({ nextEvent }) => {
+            if (!nextEvent) return null;
+            
             const today = new Date();
-            const upcomingEvents = ISLAMIC_EVENTS_2025.filter(ev => new Date(ev.date) >= today.setHours(0,0,0,0)).sort((a, b) => new Date(a.date) - new Date(b.date));
-
+            today.setHours(0,0,0,0);
+            const eventDate = new Date(nextEvent.date);
+            const diffTime = eventDate - today;
+            const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
             return (
-                <div className="bg-background-dark min-h-screen text-white flex flex-col">
-                    <header className="p-4 border-b border-white/10 flex justify-between items-center bg-surface-dark sticky top-0 z-50">
-                        <h1 className="text-xl font-serif text-accent flex items-center gap-2"><span className="material-symbols-outlined">event</span> Hari Besar Islam (2025)</h1>
-                        <Link to="/" className="text-sm hover:text-accent flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">arrow_back</span> Kembali</Link>
-                    </header>
-                    <main className="p-6 max-w-4xl mx-auto w-full flex flex-col gap-6">
-                        <div className="text-center mb-4"><p className="text-slate-400 text-sm">Hari ini: <span className="text-accent font-bold">{hijriDate}</span></p></div>
-                        {upcomingEvents.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {upcomingEvents.map((event, idx) => {
-                                    const eventDate = new Date(event.date);
-                                    const diffTime = eventDate - today;
-                                    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                    const isSoon = daysLeft <= 30;
-                                    return (
-                                        <div key={idx} className={`relative overflow-hidden rounded-xl bg-surface-dark border ${isSoon ? 'border-accent/50' : 'border-white/5'} p-6 transition-transform hover:scale-[1.02]`}>
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex flex-col"><h3 className="font-bold text-lg text-white">{event.name}</h3><span className="text-xs text-primary">{event.hijri}</span></div>
-                                                <div className={`px-3 py-1 rounded-full text-xs font-bold ${isSoon ? 'bg-accent text-black' : 'bg-white/10 text-slate-300'}`}>{daysLeft === 0 ? "HARI INI" : `${daysLeft} Hari Lagi`}</div>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-slate-400 text-sm border-t border-white/5 pt-4"><span className="material-symbols-outlined text-[18px]">calendar_month</span>{eventDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                                            <div className="absolute -bottom-4 -right-4 text-9xl text-white/5 opacity-20 pointer-events-none font-serif select-none">{idx + 1}</div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12 text-slate-500"><span className="material-symbols-outlined text-4xl mb-2">event_busy</span><p>Tidak ada acara mendatang tahun ini.</p></div>
-                        )}
-                    </main>
-                </div>
+                 <div className="bg-surface-dark/60 border border-accent/20 px-4 py-3 rounded-xl flex items-center gap-4 animate-fade-in w-full md:w-auto">
+                    <div className="bg-accent/20 p-2 rounded-lg text-accent">
+                         <span className="material-symbols-outlined text-2xl">event</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">Agenda Berikutnya</span>
+                        <div className="flex items-baseline gap-2">
+                             <span className="text-lg font-bold text-white">{nextEvent.name}</span>
+                             <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full font-bold">
+                                {daysLeft === 0 ? "HARI INI" : `${daysLeft} Hari Lagi`}
+                             </span>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-0.5">
+                            {new Date(nextEvent.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </span>
+                    </div>
+                 </div>
             );
-        };
+        });
 
         // --- PAGES ---
 
@@ -609,9 +612,12 @@
             
             const template = settings.general.template || 'classic'; 
 
-            // Find Next Event for Widget
+            // Find Next Event
             const today = new Date();
-            const nextEvent = ISLAMIC_EVENTS_2025.find(ev => new Date(ev.date) >= today.setHours(0,0,0,0));
+            today.setHours(0,0,0,0);
+            const nextEvent = ISLAMIC_EVENTS_2025
+                .filter(ev => new Date(ev.date) >= today)
+                .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
             // Audio Refs
             const adhanAudioRef = useRef(new Audio("https://www.islamcan.com/audio/adhan/azan1.mp3"));
@@ -694,13 +700,7 @@
                                     <ClockDisplay className="items-center" />
                                     <div className="mt-8 text-2xl font-serif text-slate-100">{hijriDate || "..."}</div>
                                     <div className="mt-2 text-accent font-bold uppercase tracking-widest">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                                    {nextEvent && (
-                                        <div className="mt-8 pt-6 border-t border-white/10 w-full">
-                                            <div className="text-xs text-primary uppercase tracking-widest mb-1">Acara Berikutnya</div>
-                                            <div className="font-bold text-white">{nextEvent.name}</div>
-                                            <div className="text-sm text-slate-400">{new Date(nextEvent.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long'})}</div>
-                                        </div>
-                                    )}
+                                    <div className="mt-6 w-full"><NextEventWidget nextEvent={nextEvent} /></div>
                                 </div>
                                 <div className={`glass-panel p-8 rounded-3xl flex flex-col justify-center items-center h-full ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
                                     {nextPrayer && <PrayerCountdown targetDate={nextPrayer.targetDate} nextPrayerName={nextPrayer.name === 'Sunrise' ? 'Terbit' : nextPrayer.name} status={nextPrayer.status} />}
@@ -732,7 +732,7 @@
                                          </div>
                                      ))}
                                 </div>
-                                {nextEvent && <div className="text-center text-sm text-slate-400">Acara: <span className="text-white font-bold">{nextEvent.name}</span> ({new Date(nextEvent.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})})</div>}
+                                <div className="mt-4"><NextEventWidget nextEvent={nextEvent} /></div>
                             </div>
                         );
                     case 'classic':
@@ -747,15 +747,9 @@
                                         </div>
                                         <p className="text-2xl font-serif text-slate-100">{hijriDate || "Memuat Tanggal Hijriah..."}</p>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
+                                    <div className="flex flex-col items-end gap-4">
                                         <ClockDisplay className="items-end" />
-                                        {nextEvent && (
-                                            <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-xs flex items-center gap-2">
-                                                <span className="text-primary font-bold">Acara:</span> {nextEvent.name}
-                                                <span className="text-slate-400">•</span>
-                                                <span>{new Date(nextEvent.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long'})}</span>
-                                            </div>
-                                        )}
+                                        <NextEventWidget nextEvent={nextEvent} />
                                     </div>
                                 </div>
                                 <div className={`relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group transition-colors duration-500 ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
@@ -800,8 +794,6 @@
                                 <div className="hidden md:flex items-center gap-6">
                                      <nav className="flex items-center gap-6 text-sm font-medium text-slate-200">
                                         <Link className="hover:text-accent transition-colors" to="/">Dashboard</Link>
-                                        <Link className="hover:text-accent transition-colors" to="/events">Hari Besar</Link>
-                                        <Link className="hover:text-accent transition-colors" to="/qibla">Kiblat</Link>
                                         <Link className="hover:text-accent transition-colors" to="/dua">Doa</Link>
                                     </nav>
                                     <button onClick={toggleMute} className={`flex items-center justify-center size-10 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}><span className="material-symbols-outlined">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span></button>
@@ -969,19 +961,6 @@
             </div>
         )};
 
-        const QiblaPage = () => { const navigate = useNavigate(); return (
-             <div className="bg-background-dark min-h-screen text-white flex flex-col items-center justify-center relative">
-                <Link to="/" className="absolute top-6 left-6 z-10 text-sm hover:text-accent flex items-center gap-1"><span className="material-symbols-outlined">arrow_back</span>Kembali</Link>
-                <div className="relative size-80 flex items-center justify-center">
-                    <div className="absolute inset-0 border-4 border-white/10 rounded-full"></div>
-                    <div className="absolute top-0 text-red-500 font-bold">N</div>
-                    <div className="w-1 h-32 bg-gradient-to-t from-accent to-transparent absolute bottom-1/2 origin-bottom rotate-[295deg]"></div>
-                    <span className="material-symbols-outlined text-4xl text-accent absolute" style={{transform: 'rotate(295deg) translateY(-140px)'}}>kaaba</span>
-                    <div className="text-center mt-96"><h2 className="text-2xl font-serif text-accent">295°</h2><p className="text-slate-400 text-sm">Arah Kiblat dari Jakarta</p></div>
-                </div>
-            </div>
-        )};
-
         const App = () => {
             return (
                 <SettingsProvider>
@@ -990,8 +969,6 @@
                             <Route path="/" element={<DashboardPage />} />
                             <Route path="/dua" element={<DuaPage />} />
                             <Route path="/settings" element={<SettingsPage />} />
-                            <Route path="/events" element={<IslamicEventsPage />} />
-                            <Route path="/qibla" element={<QiblaPage />} />
                         </Routes>
                     </HashRouter>
                 </SettingsProvider>
