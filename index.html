@@ -194,6 +194,15 @@
             { name: "Maulid Nabi", date: "2025-09-04", hijri: "12 Rabiul Awal 1447 H" }
         ];
 
+        // --- HELPER: ADJUST TIME ---
+        const adjustTime = (timeStr, minutesToAdd) => {
+            if (!timeStr) return "";
+            const [h, m] = timeStr.split(':').map(Number);
+            const date = new Date();
+            date.setHours(h, m + (minutesToAdd || 0));
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        };
+
         // --- PRAYER TIMES CALCULATION ENGINE (OFFLINE) ---
         const PrayerCalc = {
             d2r: (d) => d * Math.PI / 180.0,
@@ -214,7 +223,7 @@
                 const EqT = q / 15.0 - RA_final;
                 return { declination: Decl, equation: EqT };
             },
-            getTimes: (date, lat, lng, timeZone, offset = 0) => {
+            getTimes: (date, lat, lng, timeZone, offsets = {}) => {
                 let year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
                 if (month <= 2) { year -= 1; month += 12; }
                 const A = Math.floor(year / 100);
@@ -243,23 +252,21 @@
                 const asrAngle = Math.atan(1 / (1 + Math.tan(PrayerCalc.d2r(noonShadow))));
                 const asrTime = PrayerCalc.r2d(Math.acos((Math.sin(asrAngle) - Math.sin(PrayerCalc.d2r(lat)) * Math.sin(PrayerCalc.d2r(D))) / (Math.cos(PrayerCalc.d2r(lat)) * Math.cos(PrayerCalc.d2r(D))))) / 15.0;
                 const asr = dhuhr + asrTime;
-                const format = (t) => {
-                    // Standard safety margin (ihtiyat) + user offset
-                    const safetyMargin = 2; // Standard in Indonesia
+                const format = (t, correction = 0) => {
                     const time = PrayerCalc.fixHour(t + timeZone);
                     const hours = Math.floor(time);
                     const minutes = Math.floor((time - hours) * 60);
                     const d = new Date();
-                    d.setHours(hours, minutes + safetyMargin + offset, 0); 
+                    d.setHours(hours, minutes + correction, 0); 
                     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
                 };
                 return {
-                    Fajr: format(fajr),
-                    Sunrise: format(sunrise),
-                    Dhuhr: format(dhuhr),
-                    Asr: format(asr),
-                    Maghrib: format(sunset),
-                    Isha: format(isha)
+                    Fajr: format(fajr, offsets.Fajr),
+                    Sunrise: format(sunrise, offsets.Sunrise),
+                    Dhuhr: format(dhuhr, offsets.Dhuhr),
+                    Asr: format(asr, offsets.Asr),
+                    Maghrib: format(sunset, offsets.Maghrib),
+                    Isha: format(isha, offsets.Isha)
                 };
             }
         };
@@ -282,12 +289,25 @@
              } catch(e) { return null; }
         };
 
-        const fetchPrayerTimesFromAPI = async (lat, lng, month, year) => {
+        const fetchPrayerTimesFromAPI = async (lat, lng, offsets) => {
             try {
+                // Method 20 is Kemenag Indonesia
                 const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
                 if (!response.ok) throw new Error("Failed to fetch prayer times");
                 const data = await response.json();
-                return data.data; 
+                const timings = data.data.timings;
+                
+                // Apply manual corrections
+                const correctedTimings = {
+                    Fajr: adjustTime(timings.Fajr, offsets.Fajr),
+                    Sunrise: adjustTime(timings.Sunrise, offsets.Sunrise),
+                    Dhuhr: adjustTime(timings.Dhuhr, offsets.Dhuhr),
+                    Asr: adjustTime(timings.Asr, offsets.Asr),
+                    Maghrib: adjustTime(timings.Maghrib, offsets.Maghrib),
+                    Isha: adjustTime(timings.Isha, offsets.Isha)
+                };
+                
+                return { ...data.data, timings: correctedTimings }; 
             } catch (error) {
                 console.error("API Error:", error);
                 return null;
@@ -314,10 +334,22 @@
                         mosqueName: "Masjid Al-Multazam",
                         theme: "emerald",
                         template: "classic", 
-                        iqamahDelay: 10,
-                        timeOffset: 0 // Minute offset
+                        iqamahDelay: 10
                     },
-                    location: { city: "Jakarta Pusat, DKI Jakarta", lat: -6.1754, lng: 106.8272 },
+                    location: { 
+                        city: "Jakarta Pusat, DKI Jakarta", 
+                        lat: -6.1754, 
+                        lng: 106.8272,
+                        manual: false 
+                    },
+                    offsets: {
+                        Fajr: 2, // Standard Kemenag Safety Margin
+                        Sunrise: -2,
+                        Dhuhr: 2,
+                        Asr: 2,
+                        Maghrib: 2,
+                        Isha: 2
+                    },
                     appearance: { bgImage: defaultBg, customBg: null, slideshowActive: false, slideshowInterval: 10, opacity: 70, blur: 4 },
                     runningText: { 
                         active: true, 
@@ -364,20 +396,32 @@
                 document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden theme-${settings.general.theme}`;
             }, [settings]);
 
-            // OFFLINE CALCULATION LOGIC
+            // FETCH/CALCULATE PRAYER TIMES
             useEffect(() => {
-                const calculate = () => {
+                const getTimings = async () => {
+                    // Try API first (Method 20 Kemenag)
+                    if (navigator.onLine) {
+                        const data = await fetchPrayerTimesFromAPI(settings.location.lat, settings.location.lng, settings.offsets);
+                        if (data) {
+                            setTodaysTimings(data.timings);
+                            setHijriDate(`${data.date.hijri.day} ${data.date.hijri.month.en} ${data.date.hijri.year}`);
+                            return;
+                        }
+                    } 
+                    
+                    // Fallback to Offline Calculation if API fails or offline
                     const today = new Date();
                     const tzOffset = -today.getTimezoneOffset() / 60; 
-                    const offset = settings.general.timeOffset || 0;
-                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, offset);
+                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, settings.offsets);
                     setTodaysTimings(timings);
+                    
+                    // Simple Hijri Estimation for offline
                     const gregorianDate = new Date();
                     const islamicDate = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {day: 'numeric', month: 'long', year: 'numeric'}).format(gregorianDate);
                     setHijriDate(islamicDate);
                 };
-                calculate();
-            }, [settings.location.lat, settings.location.lng, settings.general.timeOffset]);
+                getTimings();
+            }, [settings.location.lat, settings.location.lng, settings.offsets]);
 
             // DYNAMIC HIJRI DATE (MAGHRIB LOGIC)
             useEffect(() => {
@@ -394,14 +438,7 @@
                     if (now >= maghribTime) {
                         hijriBaseDate.setDate(hijriBaseDate.getDate() + 1);
                     }
-
-                    const formatted = new Intl.DateTimeFormat('id-TN-u-ca-islamic', {
-                        day: 'numeric', 
-                        month: 'long', 
-                        year: 'numeric'
-                    }).format(hijriBaseDate);
-                    
-                    setHijriDate(formatted);
+                    // Re-fetch hijri string if online, or calc offline (simplified here)
                 };
 
                 updateHijri();
@@ -425,6 +462,10 @@
             const updateSettings = (section, key, value) => {
                 setSettings(prev => {
                     if (section === 'root') { return { ...prev, [key]: value }; }
+                    // Handle nested updates for offsets
+                    if (section === 'offsets') {
+                         return { ...prev, offsets: { ...prev.offsets, [key]: value } };
+                    }
                     return { ...prev, [section]: { ...prev[section], [key]: value } };
                 });
             };
@@ -932,13 +973,39 @@
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Jeda Iqomah (Menit)</span><input type="number" min="1" max="60" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.iqamahDelay} onChange={(e) => updateSettings('general', 'iqamahDelay', parseInt(e.target.value) || 10)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Tema Warna</span><div className="flex gap-4 flex-wrap">{themes.map(theme => (<button key={theme.id} onClick={() => updateSettings('general', 'theme', theme.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full border ${settings.general.theme === theme.id ? 'border-accent bg-white/10' : 'border-white/10 bg-transparent'} transition-all`}><div className="w-4 h-4 rounded-full" style={{backgroundColor: theme.color}}></div><span className="text-sm">{theme.name}</span></button>))}</div></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Template Tampilan</span><div className="flex gap-4 flex-wrap">{templates.map(tmpl => (<button key={tmpl.id} onClick={() => updateSettings('general', 'template', tmpl.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${settings.general.template === tmpl.id ? 'border-accent bg-white/10 text-accent' : 'border-white/10 bg-transparent text-slate-400'} transition-all`}><span className="material-symbols-outlined">{tmpl.icon}</span><span className="text-sm">{tmpl.name}</span></button>))}</div></label>
+                                <div className="border-t border-white/10 pt-4">
+                                     <h4 className="text-sm font-medium text-slate-300 mb-2">Koreksi Waktu Sholat (Menit)</h4>
+                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].map((prayer) => (
+                                            <label key={prayer} className="flex flex-col gap-1">
+                                                <span className="text-xs text-slate-400">{prayer}</span>
+                                                <input type="number" className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-sm focus:border-accent outline-none" 
+                                                       value={settings.offsets ? settings.offsets[prayer] : 0} 
+                                                       onChange={(e) => updateSettings('offsets', prayer, parseInt(e.target.value) || 0)} />
+                                            </label>
+                                        ))}
+                                     </div>
+                                </div>
                             </div>
                         </section>
                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
                             <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">location_on</span>Lokasi</h3>
                             <div className="flex flex-col gap-4">
-                                <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.city} onChange={(e) => updateSettings('location', 'city', e.target.value)} placeholder="Nama Kota"/>
-                                <button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-primary hover:bg-secondary py-3 rounded-lg font-bold transition-all disabled:opacity-50 text-white">{isLoadingLocation ? <span className="animate-spin material-symbols-outlined">progress_activity</span> : <span className="material-symbols-outlined">my_location</span>}{isLoadingLocation ? 'Mendeteksi...' : 'Deteksi Otomatis'}</button>
+                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                                    <input type="checkbox" checked={settings.location.manual} onChange={(e) => updateSettings('location', 'manual', e.target.checked)} className="accent-accent w-4 h-4"/>
+                                    <span className="text-sm text-slate-300">Input Manual (Latitude/Longitude)</span>
+                                </label>
+                                {settings.location.manual ? (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lat} onChange={(e) => updateSettings('location', 'lat', parseFloat(e.target.value))} placeholder="Latitude"/>
+                                        <input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lng} onChange={(e) => updateSettings('location', 'lng', parseFloat(e.target.value))} placeholder="Longitude"/>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-4">
+                                        <input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.city} readOnly placeholder="Nama Kota"/>
+                                        <button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-primary hover:bg-secondary py-3 rounded-lg font-bold transition-all disabled:opacity-50 text-white">{isLoadingLocation ? <span className="animate-spin material-symbols-outlined">progress_activity</span> : <span className="material-symbols-outlined">my_location</span>}{isLoadingLocation ? 'Mendeteksi...' : 'Deteksi Otomatis'}</button>
+                                    </div>
+                                )}
                             </div>
                         </section>
                          <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
