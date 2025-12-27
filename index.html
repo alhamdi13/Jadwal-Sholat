@@ -179,7 +179,7 @@
             console.warn("Firebase initialization failed. Running in offline mode.", e);
         }
 
-        // --- CONSTANTS: ISLAMIC EVENTS 2025 (Estimates) ---
+        // --- CONSTANTS ---
         const ISLAMIC_EVENTS_2025 = [
             { name: "Isra Mi'raj", date: "2025-01-27", hijri: "27 Rajab 1446 H" },
             { name: "Nisfu Syaban", date: "2025-02-14", hijri: "15 Syaban 1446 H" },
@@ -206,7 +206,7 @@
             { text: "Sesungguhnya setiap perbuatan tergantung niatnya.", source: "HR. Bukhari & Muslim" }
         ];
 
-        // --- HELPER: ADJUST TIME ---
+        // --- HELPERS ---
         const adjustTime = (timeStr, minutesToAdd) => {
             if (!timeStr) return "";
             const [h, m] = timeStr.split(':').map(Number);
@@ -223,7 +223,7 @@
             }).format(number);
         };
 
-        // --- PRAYER TIMES CALCULATION ENGINE (OFFLINE) ---
+        // --- PRAYER ENGINE ---
         const PrayerCalc = {
             d2r: (d) => d * Math.PI / 180.0,
             r2d: (r) => r * 180.0 / Math.PI,
@@ -293,13 +293,11 @@
 
         const fetchPrayerTimesFromAPI = async (lat, lng, offsets) => {
             try {
-                // Method 20 is Kemenag Indonesia
                 const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
                 if (!response.ok) throw new Error("Failed to fetch prayer times");
                 const data = await response.json();
                 const timings = data.data.timings;
                 
-                // Apply manual corrections
                 const correctedTimings = {
                     Fajr: adjustTime(timings.Fajr, offsets.Fajr),
                     Sunrise: adjustTime(timings.Sunrise, offsets.Sunrise),
@@ -347,14 +345,7 @@
                         lng: 106.8272,
                         manual: false 
                     },
-                    offsets: {
-                        Fajr: 2, 
-                        Sunrise: -2,
-                        Dhuhr: 2,
-                        Asr: 2,
-                        Maghrib: 2,
-                        Isha: 2
-                    },
+                    offsets: { Fajr: 2, Sunrise: -2, Dhuhr: 2, Asr: 2, Maghrib: 2, Isha: 2 },
                     appearance: { bgImage: defaultBg, customBg: null, slideshowActive: false, slideshowInterval: 10, opacity: 70, blur: 4 },
                     runningText: { 
                         active: true, 
@@ -363,30 +354,16 @@
                         size: "medium" 
                     },
                     audio: { isMuted: true },
-                    financials: {
-                        balance: 15000000,
-                        income: 4500000,
-                        expense: 1200000,
-                        lastUpdated: new Date().toISOString()
-                    },
-                    fridayInfo: {
-                        khatib: "",
-                        imam: "",
-                        muadzin: ""
-                    },
-                    slides: [
-                        { type: 'clock', duration: 15 },
-                        { type: 'financial', duration: 10 },
-                        { type: 'image', url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAIQlg9ExURoitbx-siETAk3sji_tYFU2RD2Wb3QHdPwd1H6L68cqmXzKWR48SuW5Q1TgJGbybsbWl77ODKERMY87uU11t43rTCxDRFLaaLxIUir7qXgGhdx1vRzV902TIJpEfXx1RcIX0zVXIdFXNiLLEZOafUijcZfxhvHebu9MTR6EPT6CCadKdhe1-er33j3KC7ryz7jTrysoFFBsT_XX5k4Ny-U6lVS5v63bPOkh4wK6p1Ix4_BXrPe-AwspexXFcJIaDQFHo', duration: 10 }
-                    ]
+                    financials: { balance: 15000000, income: 4500000, expense: 1200000, lastUpdated: new Date().toISOString() },
+                    fridayInfo: { khatib: "", imam: "", muadzin: "" },
+                    slides: [{ type: 'clock', duration: 15 }, { type: 'financial', duration: 10 }]
                 };
             });
 
-            // Live Prayer Data State
+            // Live Prayer Data
             const [todaysTimings, setTodaysTimings] = useState(null);
             const [hijriDate, setHijriDate] = useState("");
 
-            // Firebase Auth & Initial Tracking (Conditional)
             useEffect(() => {
                 if (firebaseAvailable && auth) {
                     const initAuth = async () => {
@@ -400,8 +377,7 @@
                     const unsubscribe = auth.onAuthStateChanged((u) => {
                         setUser(u);
                         if (u && db) {
-                            const visitsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits');
-                            visitsRef.add({
+                            db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits').add({
                                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                                 uid: u.uid,
                                 device: navigator.userAgent
@@ -417,20 +393,15 @@
                 document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden theme-${settings.general.theme}`;
             }, [settings]);
 
-            // FETCH/CALCULATE PRAYER TIMES
             useEffect(() => {
                 const getTimings = async () => {
-                    // Try API first (Method 20 Kemenag)
                     if (navigator.onLine) {
                         const data = await fetchPrayerTimesFromAPI(settings.location.lat, settings.location.lng, settings.offsets);
                         if (data) {
                             setTodaysTimings(data.timings);
-                            // Initial hijri from API, will be overridden by dynamic logic
                             return;
                         }
                     } 
-                    
-                    // Fallback to Offline Calculation if API fails or offline
                     const today = new Date();
                     const tzOffset = -today.getTimezoneOffset() / 60; 
                     const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, settings.offsets);
@@ -439,23 +410,19 @@
                 getTimings();
             }, [settings.location.lat, settings.location.lng, settings.offsets]);
 
-            // DYNAMIC HIJRI DATE (MAGHRIB LOGIC)
             useEffect(() => {
                 if (!todaysTimings) return;
-                
                 const updateHijri = () => {
                     const now = new Date();
                     const [h, m] = todaysTimings.Maghrib.split(':').map(Number);
                     const maghribTime = new Date();
                     maghribTime.setHours(h, m, 0, 0);
 
-                    // Check if Maghrib passed
                     const hijriBaseDate = new Date();
                     if (now >= maghribTime) {
                         hijriBaseDate.setDate(hijriBaseDate.getDate() + 1);
                     }
 
-                    // Apply manual adjustment from settings
                     const adjustment = settings.general.hijriAdjustment || 0;
                     hijriBaseDate.setDate(hijriBaseDate.getDate() + adjustment);
 
@@ -475,8 +442,7 @@
 
             const trackLocationUpdate = (newCity, lat, lng) => {
                 if (firebaseAvailable && user && db) {
-                    const locationsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations');
-                    locationsRef.add({
+                    db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations').add({
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                         uid: user.uid,
                         city: newCity,
@@ -493,7 +459,6 @@
                          return { ...prev, offsets: { ...prev.offsets, [key]: value } };
                     }
                     if (section === 'financials') {
-                        // AUTO UPDATE TIMESTAMP WHEN FINANCIALS CHANGED
                         return { 
                             ...prev, 
                             financials: { 
@@ -541,7 +506,6 @@
         };
 
         // --- COMPONENTS ---
-
         const ClockDisplay = memo(({ className }) => {
             const [time, setTime] = useState(new Date());
             useEffect(() => {
@@ -561,7 +525,6 @@
 
         const PrayerCountdown = memo(({ targetDate, nextPrayerName, status }) => {
             const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
-
             useEffect(() => {
                 if (!targetDate) return;
                 const timer = setInterval(() => {
@@ -581,7 +544,6 @@
 
             const fmt = (n) => String(n).padStart(2, '0');
             const isIqamah = status === 'iqamah';
-
             return (
                 <div className="flex flex-col items-center w-full">
                     <div className={`text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isIqamah ? 'text-red-400 animate-pulse' : 'text-accent'}`}>
@@ -589,20 +551,11 @@
                         Menuju {isIqamah ? `Iqomah ${nextPrayerName}` : nextPrayerName}
                     </div>
                     <div className="flex justify-center gap-4 text-center w-full">
-                        <div className="flex flex-col">
-                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.h)}</span>
-                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Jam</span>
-                        </div>
+                        <div className="flex flex-col"><span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.h)}</span><span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Jam</span></div>
                         <span className={`text-4xl sm:text-5xl font-serif animate-pulse ${isIqamah ? 'text-red-400' : 'text-accent/80'}`}>:</span>
-                        <div className="flex flex-col">
-                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.m)}</span>
-                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Menit</span>
-                        </div>
+                        <div className="flex flex-col"><span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.m)}</span><span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Menit</span></div>
                         <span className={`text-4xl sm:text-5xl font-serif animate-pulse ${isIqamah ? 'text-red-400' : 'text-accent/80'}`}>:</span>
-                        <div className="flex flex-col">
-                            <span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.s)}</span>
-                            <span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Detik</span>
-                        </div>
+                        <div className="flex flex-col"><span className={`text-4xl sm:text-5xl font-bold font-serif drop-shadow-md ${isIqamah ? 'text-red-400' : 'text-white'}`}>{fmt(countdown.s)}</span><span className="text-[10px] text-primary/80 uppercase tracking-widest mt-1">Detik</span></div>
                     </div>
                 </div>
             );
@@ -631,13 +584,11 @@
         });
 
         const HadithSection = memo(() => {
-            // Get day of year to rotate hadith automatically
             const now = new Date();
             const start = new Date(now.getFullYear(), 0, 0);
             const diff = now - start;
             const oneDay = 1000 * 60 * 60 * 24;
             const day = Math.floor(diff / oneDay);
-            
             const todaysHadith = HADITH_COLLECTION[day % HADITH_COLLECTION.length];
 
             return (
@@ -654,10 +605,8 @@
             );
         });
 
-        // --- NEW INFAQ COMPONENT ---
         const InfaqWidget = memo(({ financials }) => {
             const dateStr = financials.lastUpdated ? new Date(financials.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
-            
             return (
                 <div className="rounded-2xl bg-surface-dark/95 backdrop-blur-sm p-5 border border-white/10 flex flex-col justify-between h-full">
                     <div className="flex justify-between items-center mb-3">
@@ -666,32 +615,22 @@
                             Infaq & Sedekah
                         </h4>
                     </div>
-                    
                     <div className="flex flex-col gap-4">
-                         {/* Saldo Utama */}
                          <div className="bg-black/20 rounded-xl p-3 border border-white/5">
                             <p className="text-xs text-slate-400 mb-1">Total Saldo</p>
                             <p className="text-2xl font-bold text-white font-serif">{formatRupiah(financials.balance)}</p>
                          </div>
-
-                         {/* Masuk & Keluar */}
                          <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col">
-                                <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold uppercase mb-1">
-                                    <span className="material-symbols-outlined text-sm">arrow_upward</span> Masuk
-                                </div>
+                                <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold uppercase mb-1"><span className="material-symbols-outlined text-sm">arrow_upward</span> Masuk</div>
                                 <span className="text-lg font-bold text-slate-200">{formatRupiah(financials.income)}</span>
                             </div>
                             <div className="flex flex-col">
-                                <div className="flex items-center gap-1 text-red-400 text-xs font-bold uppercase mb-1">
-                                    <span className="material-symbols-outlined text-sm">arrow_downward</span> Keluar
-                                </div>
+                                <div className="flex items-center gap-1 text-red-400 text-xs font-bold uppercase mb-1"><span className="material-symbols-outlined text-sm">arrow_downward</span> Keluar</div>
                                 <span className="text-lg font-bold text-slate-200">{formatRupiah(financials.expense)}</span>
                             </div>
                          </div>
-                         <div className="text-[10px] text-slate-500 text-right mt-1 italic">
-                             Data per: {dateStr}
-                         </div>
+                         <div className="text-[10px] text-slate-500 text-right mt-1 italic">Data per: {dateStr}</div>
                     </div>
                 </div>
             );
@@ -756,29 +695,21 @@
 
         const NextEventWidget = memo(({ nextEvent }) => {
             if (!nextEvent) return null;
-            
             const today = new Date();
             today.setHours(0,0,0,0);
             const eventDate = new Date(nextEvent.date);
             const diffTime = eventDate - today;
             const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
             return (
                  <div className="bg-surface-dark/60 border border-accent/20 px-4 py-3 rounded-xl flex items-center gap-4 animate-fade-in w-full md:w-auto">
-                    <div className="bg-accent/20 p-2 rounded-lg text-accent">
-                         <span className="material-symbols-outlined text-2xl">event</span>
-                    </div>
+                    <div className="bg-accent/20 p-2 rounded-lg text-accent"><span className="material-symbols-outlined text-2xl">event</span></div>
                     <div className="flex flex-col">
                         <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">Agenda Berikutnya</span>
                         <div className="flex items-baseline gap-2">
                              <span className="text-lg font-bold text-white">{nextEvent.name}</span>
-                             <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full font-bold">
-                                {daysLeft === 0 ? "HARI INI" : `${daysLeft} Hari Lagi`}
-                             </span>
+                             <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full font-bold">{daysLeft === 0 ? "HARI INI" : `${daysLeft} Hari Lagi`}</span>
                         </div>
-                        <span className="text-xs text-slate-500 mt-0.5">
-                            {new Date(nextEvent.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                        </span>
+                        <span className="text-xs text-slate-500 mt-0.5">{new Date(nextEvent.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                     </div>
                  </div>
             );
@@ -786,31 +717,20 @@
 
         const RunningTextBanner = memo(({ active, texts, speed, size }) => {
             if (!active || !texts || texts.length === 0) return null;
-            
             const fontSizeClass = { small: "text-sm", medium: "text-base", large: "text-lg", xl: "text-xl" }[size] || "text-base";
             const duration = 40 - (speed * 3); 
             const displayText = texts.join(" ••• ");
 
             return (
                 <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dark backdrop-blur-md border-t border-white/10 h-12 flex items-center overflow-hidden shadow-2xl">
-                    <div className="flex items-center justify-center bg-accent text-black font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">
-                        Info Masjid
-                    </div>
+                    <div className="flex items-center justify-center bg-accent text-black font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">Info Masjid</div>
                     <div className="flex-1 overflow-hidden relative h-full flex items-center">
-                        <div 
-                            className="whitespace-nowrap absolute will-change-transform flex items-center gap-8"
-                            style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite` }}
-                        >
+                        <div className="whitespace-nowrap absolute flex items-center gap-8" style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite` }}>
                            <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic`}>{displayText}</span>
                            <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic pl-24`}>{displayText}</span> 
                         </div>
                     </div>
-                     <style>{`
-                        @keyframes marquee {
-                            0% { transform: translateX(100%); }
-                            100% { transform: translateX(-100%); }
-                        }
-                    `}</style>
+                     <style>{`@keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }`}</style>
                 </div>
             );
         });
@@ -825,15 +745,9 @@
             
             const template = settings.general.template || 'classic'; 
             const isFriday = new Date().getDay() === 5;
-
-            // Find Next Event
             const today = new Date();
             today.setHours(0,0,0,0);
-            const nextEvent = ISLAMIC_EVENTS_2025
-                .filter(ev => new Date(ev.date) >= today)
-                .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-
-            // Audio Refs
+            const nextEvent = ISLAMIC_EVENTS_2025.filter(ev => new Date(ev.date) >= today).sort((a, b) => new Date(a.date) - new Date(b.date))[0];
             const adhanAudioRef = useRef(new Audio("https://www.islamcan.com/audio/adhan/azan1.mp3"));
             const iqamahAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
 
@@ -841,43 +755,33 @@
                 if (!todaysTimings) return;
                 const calculateNextPrayer = () => {
                     const now = new Date();
-                    
                     const prayerOrder = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
                     let found = null;
                     let target = new Date();
                     let status = 'adhan'; 
                     const iqamahDelay = settings.general.iqamahDelay || 10;
-                    const prayerDuration = settings.general.prayerDuration || 10; // New: prayer mode duration
-
+                    let prayerDuration = settings.general.prayerDuration || 10;
+                    
                     for (let name of prayerOrder) {
                         const timeStr = todaysTimings[name];
                         if (!timeStr) continue;
-                        
                         const [h, m] = timeStr.split(':').map(Number);
                         const prayerTime = new Date();
                         prayerTime.setHours(h, m, 0, 0);
+                        if (isFriday && name === 'Dhuhr') { prayerDuration = settings.general.fridayPrayerDuration || 30; } else { prayerDuration = settings.general.prayerDuration || 10; }
                         const iqamahTime = new Date(prayerTime.getTime() + iqamahDelay * 60000);
-                        const prayerEndTime = new Date(iqamahTime.getTime() + prayerDuration * 60000); // End of prayer mode
-
+                        const prayerEndTime = new Date(iqamahTime.getTime() + prayerDuration * 60000);
                         const nowTs = now.getTime();
-                        
-                        // Audio triggers...
                         if (!settings.audio.isMuted && name !== 'Sunrise') {
                              if (Math.abs(nowTs - prayerTime.getTime()) < 1500) { adhanAudioRef.current.play().catch(e => console.log("Audio fail:", e)); }
+                        }
+                        if (!settings.audio.isMuted && name !== 'Sunrise') {
                              if (Math.abs(nowTs - iqamahTime.getTime()) < 1500) { iqamahAudioRef.current.play().catch(e => console.log("Audio fail:", e)); }
                         }
-
-                        // Updated Status Logic
-                        if (now < prayerTime) { 
-                            found = { name, time: timeStr }; target = prayerTime; status = 'adhan'; break; 
-                        } else if (now < iqamahTime && name !== 'Sunrise') { 
-                            found = { name, time: timeStr }; target = iqamahTime; status = 'iqamah'; break; 
-                        } else if (now < prayerEndTime && name !== 'Sunrise') {
-                            // If currently in prayer mode time window
-                            found = { name, time: timeStr }; target = prayerEndTime; status = 'prayer'; break;
-                        }
+                        if (now < prayerTime) { found = { name, time: timeStr }; target = prayerTime; status = 'adhan'; break; } 
+                        else if (now < iqamahTime && name !== 'Sunrise') { found = { name, time: timeStr }; target = iqamahTime; status = 'iqamah'; break; } 
+                        else if (now < prayerEndTime && name !== 'Sunrise') { found = { name, time: timeStr }; target = prayerEndTime; status = 'prayer'; break; }
                     }
-
                     if (!found) {
                         found = { name: 'Fajr', time: todaysTimings['Fajr'] };
                         const [h, m] = found.time.split(':').map(Number);
@@ -886,37 +790,14 @@
                         target.setHours(h, m, 0, 0);
                         status = 'adhan';
                     }
-
                     setNextPrayer({ ...found, targetDate: target, status });
                 };
-
                 calculateNextPrayer();
                 const interval = setInterval(calculateNextPrayer, 1000); 
                 return () => clearInterval(interval);
             }, [todaysTimings, settings.general.iqamahDelay, settings.audio.isMuted, settings.general.prayerDuration, settings.general.fridayPrayerDuration, isFriday]);
 
             useEffect(() => {
-                if (settings.appearance.slideshowActive) {
-                    const images = settings.appearance.customBg ? [...slideshowImages, settings.appearance.customBg] : slideshowImages;
-                    const intervalTime = settings.appearance.slideshowInterval * 60 * 1000;
-                    setBgImage(images[currentSlideIndex % images.length]);
-                    const interval = setInterval(() => {
-                        setCurrentSlideIndex(prev => {
-                            const next = (prev + 1) % images.length;
-                            setBgImage(images[next]);
-                            return next;
-                        });
-                    }, intervalTime);
-                    return () => clearInterval(interval);
-                } else {
-                    setBgImage(settings.appearance.bgImage);
-                }
-            }, [settings.appearance, currentSlideIndex]);
-
-            // BACKGROUND & SLIDESHOW LOGIC
-            useEffect(() => {
-                // Determine if we are in a "Critical Period" where slideshow should NOT run
-                // Critical = Countdown < 10 mins OR Waiting for Iqamah OR Prayer in progress
                 let isCritical = false;
                 if (nextPrayer) {
                     const now = new Date();
@@ -925,32 +806,22 @@
                         isCritical = true;
                     }
                 }
-
-                // If Critical, FORCE show Clock (Index 0) and stop rotation
                 if (isCritical) {
                     setCurrentSlideIndex(0);
                     return;
                 }
-
-                // If not critical, rotate slides based on duration
                 const slides = settings.slides || [{ type: 'clock', duration: 15 }];
                 const currentSlide = slides[currentSlideIndex % slides.length];
                 const duration = (currentSlide.duration || 10) * 1000;
-
                 const timer = setTimeout(() => {
                     setCurrentSlideIndex(prev => (prev + 1) % slides.length);
                 }, duration);
-
                 return () => clearTimeout(timer);
             }, [currentSlideIndex, nextPrayer, settings.slides]);
 
-
-            // RENDER LOGIC for Central Area
             const renderCentralArea = () => {
                 const slides = settings.slides || [{ type: 'clock' }];
                 const currentSlide = slides[currentSlideIndex % slides.length];
-
-                // Always show Clock if index is 0 OR if we are forced to show clock (logic handled in useEffect)
                 if (currentSlide.type === 'clock') {
                     return (
                          <div className={`relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group transition-colors duration-500 animate-fade-in ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
@@ -973,7 +844,6 @@
                 return null;
             };
 
-            // Blackout Mode
             if (nextPrayer && nextPrayer.status === 'prayer') {
                 return (
                     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center text-center p-8 cursor-none">
@@ -1006,10 +876,7 @@
                                     <div className="flex flex-col"><h2 className="text-xl font-bold tracking-tight text-white font-serif">{settings.general.mosqueName}</h2><p className="text-xs text-primary/80 tracking-wider uppercase">Prayer Dashboard</p></div>
                                 </div>
                                 <div className="hidden md:flex items-center gap-6">
-                                     <nav className="flex items-center gap-6 text-sm font-medium text-slate-200">
-                                        <Link className="hover:text-accent transition-colors" to="/">Dashboard</Link>
-                                    </nav>
-                                    <button onClick={toggleMute} className={`flex items-center justify-center size-10 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}><span className="material-symbols-outlined">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span></button>
+                                     <button onClick={toggleMute} className={`flex items-center justify-center size-10 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}><span className="material-symbols-outlined">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span></button>
                                     <Link to="/settings" className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-accent/50 transition-all group"><span className="material-symbols-outlined text-accent group-hover:animate-spin">settings</span><span className="text-sm font-medium">{settings.location.city}</span></Link>
                                 </div>
                             </div>
@@ -1124,10 +991,8 @@
                             const data = await response.json();
                             const city = data.address.city || data.address.town || "Lokasi Terdeteksi";
                             updateSettings('location', 'city', city);
-                            trackLocationUpdate(city, latitude, longitude);
                         } catch (error) {
                             updateSettings('location', 'city', `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-                            trackLocationUpdate("Unknown", latitude, longitude);
                         } finally { setIsLoadingLocation(false); }
                     }, (error) => { useMockLocation("Izin ditolak atau error."); }, { enableHighAccuracy: false, timeout: 5000 });
                 } catch (e) { useMockLocation("Error sistem."); }
@@ -1155,7 +1020,7 @@
                 <div className="bg-background-dark font-display min-h-screen flex flex-col text-white">
                     <header className="border-b border-white/10 px-6 py-4 bg-surface-dark flex items-center justify-between sticky top-0 z-50">
                         <h2 className="text-xl font-bold font-serif text-accent">Pengaturan</h2>
-                        <Link to="/" className="text-sm font-medium hover:text-accent transition-colors">Kembali ke Dashboard</Link>
+                        <button onClick={() => navigate('/')} className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg">Simpan & Kembali</button>
                     </header>
                     <main className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full flex flex-col gap-8">
                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
@@ -1170,14 +1035,8 @@
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Template Tampilan</span><div className="flex gap-4 flex-wrap">{templates.map(tmpl => (<button key={tmpl.id} onClick={() => updateSettings('general', 'template', tmpl.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${settings.general.template === tmpl.id ? 'border-accent bg-white/10 text-accent' : 'border-white/10 bg-transparent text-slate-400'} transition-all`}><span className="material-symbols-outlined">{tmpl.icon}</span><span className="text-sm">{tmpl.name}</span></button>))}</div></label>
                             </div>
                         </section>
-                        <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
-                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">location_on</span>Lokasi</h3>
-                            <div className="flex flex-col gap-4">
-                                <label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={settings.location.manual} onChange={(e) => updateSettings('location', 'manual', e.target.checked)} className="accent-accent w-4 h-4"/><span className="text-sm text-slate-300">Input Manual (Latitude/Longitude)</span></label>
-                                {settings.location.manual ? (<div className="grid grid-cols-2 gap-4"><input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lat} onChange={(e) => updateSettings('location', 'lat', parseFloat(e.target.value))} placeholder="Latitude"/><input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lng} onChange={(e) => updateSettings('location', 'lng', parseFloat(e.target.value))} placeholder="Longitude"/></div>) : (<div className="flex flex-col gap-4"><input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.city} readOnly placeholder="Nama Kota"/><button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-primary hover:bg-secondary py-3 rounded-lg font-bold transition-all disabled:opacity-50 text-white">{isLoadingLocation ? <span className="animate-spin material-symbols-outlined">progress_activity</span> : <span className="material-symbols-outlined">my_location</span>}{isLoadingLocation ? 'Mendeteksi...' : 'Deteksi Otomatis'}</button></div>)}
-                            </div>
-                        </section>
 
+                        {/* FRIDAY INFO SETTINGS SECTION */}
                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
                             <h3 className="text-lg font-bold text-accent mb-4 flex items-center gap-2"><span className="material-symbols-outlined">mosque</span>Petugas Jumat</h3>
                             <div className="flex flex-col gap-4">
@@ -1193,6 +1052,14 @@
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Saldo Saat Ini</span><input type="number" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={(settings.financials && settings.financials.balance) || 0} onChange={(e) => updateSettings('financials', 'balance', parseInt(e.target.value) || 0)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Pemasukan (Minggu Ini)</span><input type="number" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={(settings.financials && settings.financials.income) || 0} onChange={(e) => updateSettings('financials', 'income', parseInt(e.target.value) || 0)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Pengeluaran (Minggu Ini)</span><input type="number" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={(settings.financials && settings.financials.expense) || 0} onChange={(e) => updateSettings('financials', 'expense', parseInt(e.target.value) || 0)} /></label>
+                            </div>
+                        </section>
+
+                        <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
+                            <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">location_on</span>Lokasi</h3>
+                            <div className="flex flex-col gap-4">
+                                <label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={settings.location.manual} onChange={(e) => updateSettings('location', 'manual', e.target.checked)} className="accent-accent w-4 h-4"/><span className="text-sm text-slate-300">Input Manual (Latitude/Longitude)</span></label>
+                                {settings.location.manual ? (<div className="grid grid-cols-2 gap-4"><input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lat} onChange={(e) => updateSettings('location', 'lat', parseFloat(e.target.value))} placeholder="Latitude"/><input className="bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.lng} onChange={(e) => updateSettings('location', 'lng', parseFloat(e.target.value))} placeholder="Longitude"/></div>) : (<div className="flex flex-col gap-4"><input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.location.city} readOnly placeholder="Nama Kota"/><button onClick={handleAutoLocation} disabled={isLoadingLocation} className="flex items-center justify-center gap-2 bg-primary hover:bg-secondary py-3 rounded-lg font-bold transition-all disabled:opacity-50 text-white">{isLoadingLocation ? <span className="animate-spin material-symbols-outlined">progress_activity</span> : <span className="material-symbols-outlined">my_location</span>}{isLoadingLocation ? 'Mendeteksi...' : 'Deteksi Otomatis'}</button></div>)}
                             </div>
                         </section>
                          <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
