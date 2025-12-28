@@ -1441,10 +1441,10 @@
                                     <button onClick={addKajianSlide} className="flex-1 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
                                         <span className="material-symbols-outlined">post_add</span> Tambah Info Teks/Kajian
                                     </button>
-                                    <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-white/5 hover:bg-white/10 border border-dashed border-white/20 text-slate-300 py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
+                                    <button onClick={() => slideFileInputRef.current.click()} className="flex-1 bg-white/5 hover:bg-white/10 border border-dashed border-white/20 text-slate-300 py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
                                         <span className="material-symbols-outlined">add_photo_alternate</span> Tambah Poster Gambar
                                     </button>
-                                    <input type="file" ref={fileInputRef} onChange={handleAddSlideImage} accept="image/*" className="hidden"/>
+                                    <input type="file" ref={slideFileInputRef} onChange={handleAddSlideImage} accept="image/*" className="hidden"/>
                                 </div>
                             </div>
                         </section>
