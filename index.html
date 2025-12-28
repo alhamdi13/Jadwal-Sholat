@@ -168,7 +168,6 @@
         let firebaseAvailable = false;
 
         try {
-            // Check global variable from environment
             if (typeof __firebase_config !== 'undefined') {
                 const firebaseConfig = JSON.parse(__firebase_config);
                 app = firebase.initializeApp(firebaseConfig);
@@ -183,7 +182,7 @@
             console.warn("Firebase initialization failed. Running in offline mode.", e);
         }
 
-        // --- CONSTANTS ---
+        // --- CONSTANTS & HELPERS ---
         const ISLAMIC_EVENTS_2025 = [
             { name: "Isra Mi'raj", date: "2025-01-27", hijri: "27 Rajab 1446 H" },
             { name: "Nisfu Syaban", date: "2025-02-14", hijri: "15 Syaban 1446 H" },
@@ -210,7 +209,6 @@
             { text: "Sesungguhnya setiap perbuatan tergantung niatnya.", source: "HR. Bukhari & Muslim" }
         ];
 
-        // --- HELPERS ---
         const adjustTime = (timeStr, minutesToAdd) => {
             if (!timeStr) return "";
             const [h, m] = timeStr.split(':').map(Number);
@@ -227,7 +225,6 @@
             }).format(number);
         };
 
-        // --- IMAGE COMPRESSION HELPER ---
         const compressImage = (file, maxWidth = 1024, quality = 0.6) => {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -239,17 +236,14 @@
                         const elem = document.createElement('canvas');
                         let width = img.width;
                         let height = img.height;
-
                         if (width > maxWidth) {
                             height = height * (maxWidth / width);
                             width = maxWidth;
                         }
-
                         elem.width = width;
                         elem.height = height;
                         const ctx = elem.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
-                        // Convert to JPEG with reduced quality
                         resolve(ctx.canvas.toDataURL('image/jpeg', quality));
                     };
                     img.onerror = (error) => reject(error);
@@ -354,17 +348,11 @@
 
         const defaultBg = "https://lh3.googleusercontent.com/aida-public/AB6AXuAOrQLKRUmFQhPxWSXwhFKntvqt5JvcRPZHSGEfJ6534s7zRxMYnhaVjiPPkQb1dSZerTsg6wuTZGGxx3ldiOsjAcwCPu5eXkl9Sh31aJykos91Vq4LS-XOvIdMt9-Lk2PEZSEb3Yy8MYY89dlvY-l8Bpgmn5aJs7P3TRtrwUCaytrFFcAo64P_Bl8hcaxQGUjEsNHbGrRYLfi8MNrFtYTDY-_FVk1V8cUKnIvDDK-pdMtl2WtaznRR5qWi3vmydcqQv2gcQj8jrVk";
         
-        const slideshowImages = [
-            defaultBg,
-            "https://lh3.googleusercontent.com/aida-public/AB6AXuAIQlg9ExURoitbx-siETAk3sji_tYFU2RD2Wb3QHdPwd1H6L68cqmXzKWR48SuW5Q1TgJGbybsbWl77ODKERMY87uU11t43rTCxDRFLaaLxIUir7qXgGhdx1vRzV902TIJpEfXx1RcIX0zVXIdFXNiLLEZOafUijcZfxhvHebu9MTR6EPT6CCadKdhe1-er33j3KC7ryz7jTrysoFFBsT_XX5k4Ny-U6lVS5v63bPOkh4wK6p1Ix4_BXrPe-AwspexXFcJIaDQFHo",
-            "https://lh3.googleusercontent.com/aida-public/AB6AXuB2LoTTl_o0k-4Xw86X_LRqqxQIicJpI1M_7AHxoPXjYwPEROPNoYl6t12YQuZKgb2YJFYswu81I8cZd7OmIRIRlQCn362IBxm6m--IkVU78Ndk1m7TSXg7veU9tbE49Um5uhUTf2rGHWHfBM5g19xmfd6tq9z3iE4kO9TUZCzJR4sKlL9t5agvMP6fAgbP2dV8q8thdKo3cReM04o95GiRAw5JhKgj1cWWMj6tFTxbtNBeBwDhpACJ_4Ne5MOe79ED9n1fH_b6YTw"
-        ];
-
         const SettingsProvider = ({ children }) => {
             const [user, setUser] = useState(null);
             const [settings, setSettings] = useState(() => {
                 const saved = localStorage.getItem('muslimProSettings');
-                return saved ? JSON.parse(saved) : {
+                const defaultSettings = {
                     general: {
                         mosqueName: "Masjid Al-Multazam",
                         theme: "emerald",
@@ -391,8 +379,47 @@
                     audio: { isMuted: true },
                     financials: { balance: 15000000, income: 4500000, expense: 1200000, lastUpdated: new Date().toISOString() },
                     fridayInfo: { khatib: "", imam: "", muadzin: "" },
-                    slides: [{ type: 'clock', duration: 15 }, { type: 'financial', duration: 10 }]
+                    slides: [
+                        { type: 'clock', duration: 20 }, 
+                        { type: 'financial', duration: 15 },
+                        { 
+                            type: 'kajian', 
+                            title: 'Kajian Bulanan', 
+                            ustadz: 'Ust. Fulan Al-Fulani', 
+                            date: 'Sabtu, 20.00 WITA', 
+                            description: 'Membahas kitab Riyadhus Shalihin bab Sabar.', 
+                            duration: 15 
+                        },
+                        {
+                            type: 'image',
+                            url: 'https://images.unsplash.com/photo-1564769629178-530af6354317?ixlib=rb-1.2.1&auto=format&fit=crop&w=1280&q=80',
+                            caption: 'Jagalah Kebersihan Masjid',
+                            duration: 10
+                        }
+                    ]
                 };
+
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        return {
+                            ...defaultSettings,
+                            ...parsed,
+                            general: { ...defaultSettings.general, ...parsed.general },
+                            location: { ...defaultSettings.location, ...parsed.location },
+                            offsets: { ...defaultSettings.offsets, ...parsed.offsets },
+                            appearance: { ...defaultSettings.appearance, ...parsed.appearance },
+                            runningText: { ...defaultSettings.runningText, ...parsed.runningText },
+                            audio: { ...defaultSettings.audio, ...parsed.audio },
+                            financials: { ...defaultSettings.financials, ...parsed.financials },
+                            fridayInfo: { ...defaultSettings.fridayInfo, ...parsed.fridayInfo },
+                            slides: Array.isArray(parsed.slides) ? parsed.slides : defaultSettings.slides
+                        };
+                    } catch (e) {
+                        return defaultSettings;
+                    }
+                }
+                return defaultSettings;
             });
 
             // Live Prayer Data
@@ -415,13 +442,6 @@
                     initAuth();
                     const unsubscribe = auth.onAuthStateChanged((u) => {
                         setUser(u);
-                        if (u && db) {
-                            db.collection('artifacts').doc(appId).collection('public').doc('data').collection('visits').add({
-                                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                                uid: u.uid,
-                                device: navigator.userAgent
-                            }).catch(err => console.log("Tracking disabled offline"));
-                        }
                     });
                     return () => unsubscribe();
                 }
@@ -431,9 +451,8 @@
                 try {
                     localStorage.setItem('muslimProSettings', JSON.stringify(settings));
                 } catch (e) {
-                    console.error("Local Storage Full:", e);
                     if (e.name === 'QuotaExceededError' || e.code === 22) {
-                        alert("Penyimpanan Lokal Penuh! Gambar yang Anda masukkan terlalu besar. Pengaturan tidak tersimpan. Harap hapus beberapa slide atau gunakan gambar yang lebih kecil (kompres dulu).");
+                        alert("Penyimpanan Lokal Penuh! Gambar yang Anda masukkan terlalu besar. Pengaturan tidak tersimpan. Harap hapus beberapa slide atau gunakan gambar yang lebih kecil.");
                     }
                 }
                 document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden theme-${settings.general.theme}`;
@@ -486,40 +505,20 @@
                 return () => clearInterval(interval);
             }, [todaysTimings, settings.general.hijriAdjustment]);
 
-            const trackLocationUpdate = (newCity, lat, lng) => {
-                if (firebaseAvailable && user && db) {
-                    db.collection('artifacts').doc(appId).collection('public').doc('data').collection('locations').add({
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        uid: user.uid,
-                        city: newCity,
-                        lat: lat,
-                        lng: lng
-                    }).catch(err => console.log("Tracking location disabled offline"));
-                }
-            };
-
             const updateSettings = (section, key, value) => {
                 setSettings(prev => {
                     if (section === 'root') { return { ...prev, [key]: value }; }
-                    if (section === 'offsets') {
-                         return { ...prev, offsets: { ...prev.offsets, [key]: value } };
+                    if (section === 'offsets') { return { ...prev, offsets: { ...prev.offsets, [key]: value } }; }
+                    if (section === 'financials') { return { ...prev, financials: { ...prev.financials, [key]: value, lastUpdated: new Date().toISOString() } }; }
+                    if (section === 'fridayInfo') { return { ...prev, fridayInfo: { ...prev.fridayInfo, [key]: value } }; }
+                    
+                    // FIX: Handle direct update for 'slides' array correctly
+                    if (section === 'slides') { 
+                        // If 3rd arg 'value' is undefined, it means the caller passed data in the 2nd arg 'key'
+                        const newValue = value === undefined ? key : value;
+                        return { ...prev, slides: newValue }; 
                     }
-                    if (section === 'financials') {
-                        return { 
-                            ...prev, 
-                            financials: { 
-                                ...prev.financials, 
-                                [key]: value,
-                                lastUpdated: new Date().toISOString()
-                            } 
-                        };
-                    }
-                    if (section === 'fridayInfo') {
-                        return { ...prev, fridayInfo: { ...prev.fridayInfo, [key]: value } };
-                    }
-                    if (section === 'slides') {
-                         return { ...prev, [section]: value };
-                    }
+                    
                     return { ...prev, [section]: { ...prev[section], [key]: value } };
                 });
             };
@@ -530,21 +529,18 @@
 
             const handleImageUpload = async (file) => {
                 try {
-                    // Kompres gambar background (max width 1280px, quality 60%)
                     const compressedBase64 = await compressImage(file, 1280, 0.6);
-                    
                     setSettings(prev => ({
                         ...prev,
                         appearance: { ...prev.appearance, bgImage: compressedBase64, customBg: compressedBase64, slideshowActive: false }
                     }));
                 } catch (error) {
-                    console.error("Gagal memproses gambar:", error);
-                    alert("Gagal memproses gambar. Coba gunakan file lain.");
+                    alert("Gagal memproses gambar.");
                 }
             };
 
             return (
-                <SettingsContext.Provider value={{ settings, updateSettings, toggleMute, handleImageUpload, slideshowImages, todaysTimings, hijriDate, trackLocationUpdate, user, db, appId, firebaseAvailable }}>
+                <SettingsContext.Provider value={{ settings, updateSettings, toggleMute, handleImageUpload, todaysTimings, hijriDate, user, db, appId, firebaseAvailable }}>
                     {children}
                 </SettingsContext.Provider>
             );
@@ -741,6 +737,36 @@
             );
         });
 
+        const KajianSlide = memo(({ slide }) => {
+            return (
+                <div className="relative glass-panel rounded-3xl p-8 md:p-12 flex flex-col justify-center items-center h-full w-full shadow-2xl animate-fade-in border-accent/30 bg-surface-dark/90 text-center">
+                    <div className="bg-accent/10 p-4 rounded-full mb-6 border border-accent/20">
+                        <span className="material-symbols-outlined text-5xl text-accent">mosque</span>
+                    </div>
+                    <h2 className="text-3xl md:text-5xl font-bold text-white font-serif mb-4 drop-shadow-lg">{slide.title}</h2>
+                    
+                    <div className="w-24 h-1 bg-accent/50 rounded-full mb-6"></div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+                        <div className="bg-black/20 p-6 rounded-2xl border border-white/5 flex flex-col items-center">
+                            <span className="text-slate-400 text-sm uppercase tracking-widest mb-2">Penceramah</span>
+                            <span className="text-2xl font-bold text-primary">{slide.ustadz}</span>
+                        </div>
+                        <div className="bg-black/20 p-6 rounded-2xl border border-white/5 flex flex-col items-center">
+                            <span className="text-slate-400 text-sm uppercase tracking-widest mb-2">Waktu</span>
+                            <span className="text-2xl font-bold text-white">{slide.date}</span>
+                        </div>
+                    </div>
+                    
+                    {slide.description && (
+                        <p className="mt-8 text-lg text-slate-300 max-w-3xl leading-relaxed bg-black/10 px-6 py-3 rounded-xl border border-white/5">
+                            {slide.description}
+                        </p>
+                    )}
+                </div>
+            );
+        });
+
         const FridayWidget = memo(({ fridayInfo }) => {
             return (
                 <div className="bg-surface-dark/60 border border-accent/20 px-4 py-3 rounded-xl animate-fade-in w-full">
@@ -786,7 +812,7 @@
             const displayText = texts.join(" ••• ");
 
             return (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dark backdrop-blur-md border-t border-white/10 h-12 flex items-center overflow-hidden shadow-2xl">
+                <div className="fixed bottom-0 left-0 right-0 z-[120] bg-surface-dark backdrop-blur-md border-t border-white/10 h-12 flex items-center overflow-hidden shadow-2xl">
                     <div className="flex items-center justify-center bg-accent text-black font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">Info Masjid</div>
                     <div className="flex-1 overflow-hidden relative h-full flex items-center">
                         <div className="whitespace-nowrap absolute flex items-center gap-8" style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite` }}>
@@ -826,7 +852,6 @@
 
         const ModernLayout = ({ settings, hijriDate, infoWidget, renderCentralArea, displayPrayers, nextPrayer }) => (
             <div className="grid grid-cols-12 gap-6 h-full">
-                {/* Left Sidebar (Info & Times) */}
                 <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
                     <div className="bg-surface-dark/90 backdrop-blur-md p-6 rounded-2xl border border-white/10 flex flex-col items-center text-center">
                         <ClockDisplay className="items-center mb-4" />
@@ -844,14 +869,11 @@
                     </div>
                 </div>
 
-                {/* Right Content */}
                 <div className="col-span-12 lg:col-span-9 flex flex-col gap-6">
-                    {/* Main Slide Area */}
                     <div className="flex-1 min-h-[400px] rounded-3xl overflow-hidden relative">
                          {renderCentralArea()}
                     </div>
                     
-                    {/* Bottom Widgets */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
                         <HadithSection />
                         <div className="flex flex-col gap-4">
@@ -926,7 +948,7 @@
             const today = new Date();
             today.setHours(0,0,0,0);
             const nextEvent = ISLAMIC_EVENTS_2025.filter(ev => new Date(ev.date) >= today).sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-            const adhanAudioRef = useRef(new Audio("https://www.islamcan.com/audio/adhan/azan1.mp3"));
+            const adhanAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
             const iqamahAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
 
             useEffect(() => {
@@ -985,7 +1007,7 @@
                     }
                 }
                 if (isCritical) {
-                    setCurrentSlideIndex(0);
+                    setCurrentSlideIndex(0); // Force clock on critical times
                     return;
                 }
                 const slides = settings.slides || [{ type: 'clock', duration: 15 }];
@@ -997,14 +1019,10 @@
                 return () => clearTimeout(timer);
             }, [currentSlideIndex, nextPrayer, settings.slides]);
 
+            const currentSlide = (settings.slides || [])[currentSlideIndex % (settings.slides || []).length] || { type: 'clock' };
+
             const renderCentralArea = () => {
-                const slides = settings.slides || [{ type: 'clock' }];
-                const currentSlide = slides[currentSlideIndex % slides.length];
-                
-                // For modern layout, we might want to skip the 'clock' slide if it's redundant, 
-                // but for simplicity, let's keep logic generic or adjust per layout if needed.
-                // In Modern layout, clock is on sidebar, so 'clock' slide might be redundant there.
-                
+                // For clock type, render standard clock in central area
                 if (currentSlide.type === 'clock') {
                     return (
                          <div className={`relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group transition-colors duration-500 animate-fade-in h-full flex flex-col justify-center ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
@@ -1019,20 +1037,66 @@
                             </div>
                         </div>
                     );
-                } else if (currentSlide.type === 'financial') {
-                    return <FinancialSlide financials={settings.financials || {}} />;
-                } else if (currentSlide.type === 'image') {
-                    return <ImageSlide url={currentSlide.url} caption={currentSlide.caption} />;
                 }
+                // For other types, return empty div as they will be handled by Full Screen Overlay
                 return null;
             };
 
+            // PRIORITY 1: PRAYER MODE (FULL SCREEN)
             if (nextPrayer && nextPrayer.status === 'prayer') {
                 return (
                     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center text-center p-8 cursor-none">
                          <div className="text-gray-500 text-sm uppercase tracking-[0.5em] mb-4 animate-pulse">Sedang Berlangsung</div>
                          <h1 className="text-4xl md:text-6xl font-serif text-white/90 font-bold mb-6">SHOLAT {nextPrayer.name.toUpperCase()}</h1>
                          <div className="text-accent/80 text-xl md:text-2xl font-medium tracking-wide animate-pulse">Luruskan dan Rapatkan Shaf</div>
+                    </div>
+                );
+            }
+
+            // PRIORITY 2: FULL SCREEN SLIDESHOW (FLYER / KAJIAN / FINANCIAL)
+            if (currentSlide.type !== 'clock') {
+                return (
+                    <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col animate-fade-in">
+                        {/* Background for non-image slides */}
+                        {currentSlide.type !== 'image' && (
+                            <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url("${settings.appearance.bgImage}")` }}></div>
+                        )}
+                        
+                        <div className="flex-1 relative overflow-hidden flex items-center justify-center p-0 z-10">
+                            {currentSlide.type === 'image' && (
+                                <div className="w-full h-full relative bg-black flex items-center justify-center">
+                                     <img src={currentSlide.url} alt="Slide" className="w-full h-full object-contain" />
+                                     {currentSlide.caption && (
+                                         <div className="absolute bottom-16 left-0 right-0 text-center">
+                                             <div className="bg-black/70 backdrop-blur-md py-3 px-8 mx-auto w-fit rounded-full max-w-4xl border border-white/10">
+                                                 <h3 className="text-xl md:text-3xl font-bold font-serif text-white">{currentSlide.caption}</h3>
+                                             </div>
+                                         </div>
+                                     )}
+                                </div>
+                            )}
+
+                            {currentSlide.type === 'kajian' && (
+                                <div className="w-full h-full flex items-center justify-center p-8">
+                                     <div className="max-w-6xl w-full transform scale-110">
+                                         <KajianSlide slide={currentSlide} />
+                                     </div>
+                                </div>
+                            )}
+
+                            {currentSlide.type === 'financial' && (
+                                <div className="w-full h-full flex items-center justify-center p-8">
+                                     <div className="max-w-6xl w-full transform scale-110">
+                                         <FinancialSlide financials={settings.financials || {}} />
+                                     </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Always show Running Text at bottom */}
+                        <div className="shrink-0 z-20">
+                             <RunningTextBanner active={settings.runningText.active} texts={settings.runningText.texts} speed={settings.runningText.speed} size={settings.runningText.size} />
+                        </div>
                     </div>
                 );
             }
@@ -1052,7 +1116,6 @@
                         <div className="absolute inset-0 bg-islamic-pattern opacity-10"></div>
                     </div>
                     <div className="relative z-10 flex flex-col min-h-screen">
-                        {/* Only show header in Classic and Modern modes, Simple hides it to focus on content */}
                         {template !== 'simple' && (
                             <header className="w-full border-b border-white/10 bg-gradient-to-b from-surface-dark/90 to-transparent backdrop-blur-sm">
                                 <div className="px-6 lg:px-12 py-5 flex items-center justify-between">
@@ -1068,7 +1131,6 @@
                             </header>
                         )}
                         
-                        {/* Simple mode setting button (floating) since header is hidden */}
                         {template === 'simple' && (
                              <Link to="/settings" className="fixed top-4 right-4 z-50 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all"><span className="material-symbols-outlined">settings</span></Link>
                         )}
@@ -1154,7 +1216,7 @@
                 const file = e.target.files[0];
                 if (file) {
                     await handleImageUpload(file);
-                    e.target.value = ""; // Reset input agar bisa upload file yang sama jika gagal
+                    e.target.value = ""; 
                 }
             };
 
@@ -1206,27 +1268,53 @@
                 const file = e.target.files[0];
                 if (file) {
                    try {
-                       // Kompres gambar slide (max width 800px, quality 60%) agar hemat memori
                        const compressedBase64 = await compressImage(file, 800, 0.6);
-                       
-                       const newSlides = [...settings.slides, { type: 'image', url: compressedBase64, duration: 10 }];
+                       const currentSlides = Array.isArray(settings.slides) ? settings.slides : [];
+                       const newSlides = [...currentSlides, { type: 'image', url: compressedBase64, duration: 10 }];
                        updateSettings('slides', newSlides);
                    } catch (error) {
                        console.error("Gagal upload slide:", error);
                        alert("Gagal menambahkan slide. Pastikan format gambar benar.");
                    }
-                   e.target.value = ""; // Reset input
+                   e.target.value = ""; 
                 }
             };
+
+            const addKajianSlide = () => {
+                const currentSlides = Array.isArray(settings.slides) ? settings.slides : [];
+                const newSlides = [...currentSlides, { 
+                    type: 'kajian', 
+                    title: 'Judul Kajian', 
+                    ustadz: 'Nama Ustadz', 
+                    date: 'Waktu Pelaksanaan', 
+                    description: '', 
+                    duration: 15 
+                }];
+                updateSettings('slides', newSlides);
+            };
+
             const removeSlide = (idx) => {
-                const newSlides = settings.slides.filter((_, i) => i !== idx);
+                const currentSlides = Array.isArray(settings.slides) ? settings.slides : [];
+                const newSlides = currentSlides.filter((_, i) => i !== idx);
                 updateSettings('slides', newSlides);
             };
 
             const updateSlideDuration = (idx, newDuration) => {
-                const newSlides = [...settings.slides];
-                newSlides[idx].duration = newDuration || 10; // Fallback ke 10 detik jika kosong
-                updateSettings('slides', newSlides);
+                const currentSlides = Array.isArray(settings.slides) ? settings.slides : [];
+                const newSlides = [...currentSlides];
+                if (newSlides[idx]) {
+                    newSlides[idx].duration = newDuration || 10; 
+                    updateSettings('slides', newSlides);
+                }
+            };
+
+            const updateSlideContent = (idx, field, val) => {
+                const currentSlides = Array.isArray(settings.slides) ? settings.slides : [];
+                const newSlides = [...currentSlides];
+                if (newSlides[idx]) {
+                    newSlides[idx][field] = val;
+                    updateSettings('slides', newSlides);
+                }
             };
 
             return (
@@ -1287,38 +1375,74 @@
                             <h3 className="text-lg font-bold text-accent mb-4 flex items-center gap-2"><span className="material-symbols-outlined">collections</span>Mading Digital (Slideshow)</h3>
                             <p className="text-xs text-slate-400 mb-4">Konten ini akan muncul bergantian di area tengah dashboard. Batas aman: 5-10 gambar.</p>
                             <div className="flex flex-col gap-4">
-                                {settings.slides.map((slide, idx) => (
-                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between bg-black/20 p-3 rounded-lg border border-white/5 gap-4">
-                                        <div className="flex items-center gap-3 flex-1">
-                                            <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
-                                            {slide.type === 'clock' && <div className="flex items-center gap-2"><span className="material-symbols-outlined text-primary">schedule</span><span className="text-sm font-bold text-primary">Jam Utama</span></div>}
-                                            {slide.type === 'financial' && <div className="flex items-center gap-2"><span className="material-symbols-outlined text-accent">account_balance</span><span className="text-sm font-bold text-accent">Laporan Keuangan</span></div>}
-                                            {slide.type === 'image' && <div className="flex items-center gap-2"><img src={slide.url} className="w-10 h-10 object-cover rounded border border-white/10" alt="Slide" /><span className="text-sm text-slate-300">Poster Gambar</span></div>}
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-4 justify-end">
-                                            <div className="flex flex-col items-end">
-                                                <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Durasi (Detik)</label>
-                                                <input 
-                                                    type="number" 
-                                                    min="5" 
-                                                    max="300"
-                                                    className="w-20 bg-black/40 border border-white/10 rounded px-2 py-1 text-right text-sm text-white focus:border-accent outline-none"
-                                                    value={slide.duration || 10} 
-                                                    onChange={(e) => updateSlideDuration(idx, parseInt(e.target.value))}
-                                                />
+                                {(settings.slides || []).map((slide, idx) => (
+                                    <div key={idx} className="flex flex-col bg-black/20 p-4 rounded-lg border border-white/5 gap-4">
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
+                                                {slide.type === 'clock' && <div className="flex items-center gap-2"><span className="material-symbols-outlined text-primary">schedule</span><span className="text-sm font-bold text-primary">Jam Utama</span></div>}
+                                                {slide.type === 'financial' && <div className="flex items-center gap-2"><span className="material-symbols-outlined text-accent">account_balance</span><span className="text-sm font-bold text-accent">Laporan Keuangan</span></div>}
+                                                {slide.type === 'kajian' && <div className="flex items-center gap-2"><span className="material-symbols-outlined text-green-400">menu_book</span><span className="text-sm font-bold text-green-400">Info Kajian</span></div>}
+                                                {slide.type === 'image' && <div className="flex items-center gap-2"><img src={slide.url} className="w-10 h-10 object-cover rounded border border-white/10" alt="Slide" /><span className="text-sm text-slate-300">Poster Gambar</span></div>}
                                             </div>
-                                            {slide.type !== 'clock' && (
-                                                <button onClick={() => removeSlide(idx)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-2 rounded-lg transition-colors" title="Hapus Slide">
-                                                    <span className="material-symbols-outlined text-lg">delete</span>
-                                                </button>
-                                            )}
+                                            
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex flex-col items-end">
+                                                    <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Durasi (Detik)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        min="5" 
+                                                        max="300"
+                                                        className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-right text-sm text-white focus:border-accent outline-none"
+                                                        value={slide.duration || 10} 
+                                                        onChange={(e) => updateSlideDuration(idx, parseInt(e.target.value))}
+                                                    />
+                                                </div>
+                                                {slide.type !== 'clock' && (
+                                                    <button onClick={() => removeSlide(idx)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-2 rounded-lg transition-colors" title="Hapus Slide">
+                                                        <span className="material-symbols-outlined text-lg">delete</span>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
+
+                                        {/* Input fields for Kajian Type */}
+                                        {slide.type === 'kajian' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full bg-black/20 p-3 rounded border border-white/5">
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold">Judul Kajian</label>
+                                                    <input className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:border-accent outline-none text-white placeholder-slate-500" placeholder="Contoh: Kajian Subuh" value={slide.title} onChange={e => updateSlideContent(idx, 'title', e.target.value)} />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold">Nama Penceramah</label>
+                                                    <input className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:border-accent outline-none text-white placeholder-slate-500" placeholder="Nama Ustadz" value={slide.ustadz} onChange={e => updateSlideContent(idx, 'ustadz', e.target.value)} />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold">Waktu Pelaksanaan</label>
+                                                    <input className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:border-accent outline-none text-white placeholder-slate-500" placeholder="Contoh: Ahad Ba'da Subuh" value={slide.date} onChange={e => updateSlideContent(idx, 'date', e.target.value)} />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold">Deskripsi (Opsional)</label>
+                                                    <input className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:border-accent outline-none text-white placeholder-slate-500" placeholder="Keterangan tambahan..." value={slide.description} onChange={e => updateSlideContent(idx, 'description', e.target.value)} />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Input for Image Caption */}
+                                        {slide.type === 'image' && (
+                                             <div className="flex flex-col gap-1 w-full bg-black/20 p-3 rounded border border-white/5">
+                                                <label className="text-[10px] uppercase text-slate-400 font-bold">Keterangan Gambar (Opsional)</label>
+                                                <input className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm focus:border-accent outline-none text-white placeholder-slate-500" placeholder="Tulis caption di sini..." value={slide.caption || ''} onChange={e => updateSlideContent(idx, 'caption', e.target.value)} />
+                                             </div>
+                                        )}
                                     </div>
                                 ))}
                                 <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
-                                    <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-accent/10 hover:bg-accent/20 border border-dashed border-accent/30 text-accent py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
-                                        <span className="material-symbols-outlined">add_photo_alternate</span> Tambah Poster Baru
+                                    <button onClick={addKajianSlide} className="flex-1 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
+                                        <span className="material-symbols-outlined">post_add</span> Tambah Info Teks/Kajian
+                                    </button>
+                                    <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-white/5 hover:bg-white/10 border border-dashed border-white/20 text-slate-300 py-3 rounded-lg text-sm flex items-center justify-center gap-2 font-bold transition-all">
+                                        <span className="material-symbols-outlined">add_photo_alternate</span> Tambah Poster Gambar
                                     </button>
                                     <input type="file" ref={fileInputRef} onChange={handleAddSlideImage} accept="image/*" className="hidden"/>
                                 </div>
