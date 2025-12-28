@@ -160,6 +160,10 @@
         const { createRoot } = ReactDOM;
         const { HashRouter, Routes, Route, Link, useNavigate } = ReactRouterDOM;
 
+        // --- OFFLINE BEEP SOUND (Base64) ---
+        // This ensures sound works even without internet connection
+        const BEEP_AUDIO_BASE64 = "data:audio/wav;base64,UklGRl9vT1BXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"; 
+
         // --- SAFE FIREBASE SETUP ---
         let app = null;
         let auth = null;
@@ -460,17 +464,34 @@
 
             useEffect(() => {
                 const getTimings = async () => {
+                    const todayStr = new Date().toDateString();
+                    // 1. Check local storage first (Offline Friendly)
+                    const cachedTimings = localStorage.getItem('prayerTimings');
+                    const cachedDate = localStorage.getItem('prayerDate');
+
+                    if (cachedTimings && cachedDate === todayStr) {
+                         setTodaysTimings(JSON.parse(cachedTimings));
+                    }
+
+                    // 2. Try Fetch Online
                     if (navigator.onLine) {
                         const data = await fetchPrayerTimesFromAPI(settings.location.lat, settings.location.lng, settings.offsets);
                         if (data) {
                             setTodaysTimings(data.timings);
+                            // Cache it
+                            localStorage.setItem('prayerTimings', JSON.stringify(data.timings));
+                            localStorage.setItem('prayerDate', todayStr);
                             return;
                         }
                     } 
-                    const today = new Date();
-                    const tzOffset = -today.getTimezoneOffset() / 60; 
-                    const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, settings.offsets);
-                    setTodaysTimings(timings);
+                    
+                    // 3. Fallback to Calc if online failed and no cache or different date
+                    if (!cachedTimings || cachedDate !== todayStr) {
+                        const today = new Date();
+                        const tzOffset = -today.getTimezoneOffset() / 60; 
+                        const timings = PrayerCalc.getTimes(today, settings.location.lat, settings.location.lng, tzOffset, settings.offsets);
+                        setTodaysTimings(timings);
+                    }
                 };
                 getTimings();
             }, [settings.location.lat, settings.location.lng, settings.offsets]);
@@ -512,9 +533,7 @@
                     if (section === 'financials') { return { ...prev, financials: { ...prev.financials, [key]: value, lastUpdated: new Date().toISOString() } }; }
                     if (section === 'fridayInfo') { return { ...prev, fridayInfo: { ...prev.fridayInfo, [key]: value } }; }
                     
-                    // FIX: Handle direct update for 'slides' array correctly
                     if (section === 'slides') { 
-                        // If 3rd arg 'value' is undefined, it means the caller passed data in the 2nd arg 'key'
                         const newValue = value === undefined ? key : value;
                         return { ...prev, slides: newValue }; 
                     }
@@ -948,8 +967,8 @@
             const today = new Date();
             today.setHours(0,0,0,0);
             const nextEvent = ISLAMIC_EVENTS_2025.filter(ev => new Date(ev.date) >= today).sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-            const adhanAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
-            const iqamahAudioRef = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
+            const adhanAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); // Use local base64 sound
+            const iqamahAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); // Use local base64 sound
 
             useEffect(() => {
                 if (!todaysTimings) return;
