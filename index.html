@@ -1,29 +1,24 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html class="dark" lang="id">
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>MuslimPro & Prayer Dashboard</title>
+    
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Cinzel:wght@400;600;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet"/>
     <!-- Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    
-    <!-- React Dependencies -->
+
+    <!-- LOAD SCRIPT (Saat ini pakai CDN agar bisa dipreview. Ganti ke 'libs/...' untuk OFFLINE FLASHDISK) -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
     <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
     <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-
-    <!-- Firebase Dependencies -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -41,9 +36,6 @@
                         "arabic": ["Amiri", "serif"],
                         "serif": ["Cinzel", "serif"],
                         "modern": ["Inter", "sans-serif"],
-                    },
-                    backgroundImage: {
-                        'islamic-pattern': "url('https://www.transparenttextures.com/patterns/arabesque.png')",
                     },
                     animation: {
                         'marquee': 'marquee 25s linear infinite',
@@ -68,6 +60,7 @@
             font-family: 'Plus Jakarta Sans', sans-serif;
             background-color: #020617;
             color: white;
+            /* No overflow:hidden on body to allow potential fallback scrolling, though we handle it in app container now */
         }
         
         /* --- THEME VARIABLES --- */
@@ -152,7 +145,7 @@
         }
     </style>
 </head>
-<body class="bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden">
+<body class="bg-background-dark text-slate-100 transition-colors duration-500">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -255,6 +248,13 @@
             });
         };
 
+        // --- TIME HELPER WITH OFFSET ---
+        const getCorrectedDate = (offsetMinutes = 0) => {
+            const now = new Date();
+            if (!offsetMinutes) return now;
+            return new Date(now.getTime() + offsetMinutes * 60000);
+        };
+
         // --- PRAYER ENGINE ---
         const PrayerCalc = {
             d2r: (d) => d * Math.PI / 180.0,
@@ -275,7 +275,7 @@
                 const EqT = q / 15.0 - RA_final;
                 return { declination: Decl, equation: EqT };
             },
-            getTimes: (date, lat, lng, timeZone, offsets = {}) => {
+            getTimes: (date, lat, lng, timeZone, offsets = {}, method = 20) => {
                 let year = date.getFullYear(), month = date.getMonth() + 1, day = date.getDate();
                 if (month <= 2) { year -= 1; month += 12; }
                 const A = Math.floor(year / 100);
@@ -284,8 +284,15 @@
                 const sun = PrayerCalc.sunPosition(JD);
                 const D = sun.declination;
                 const EqT = sun.equation;
-                const fajrAngle = 20; 
-                const ishaAngle = 18;
+                
+                let fajrAngle = 20; 
+                let ishaAngle = 18;
+
+                if (method === 'muhammadiyah') {
+                    fajrAngle = 18;
+                    ishaAngle = 18;
+                }
+
                 const computeTime = (angle, mode) => {
                    const P1 = -Math.sin(PrayerCalc.d2r(angle)) - Math.sin(PrayerCalc.d2r(lat)) * Math.sin(PrayerCalc.d2r(D));
                    const P2 = Math.cos(PrayerCalc.d2r(lat)) * Math.cos(PrayerCalc.d2r(D));
@@ -323,9 +330,11 @@
             }
         };
 
-        const fetchPrayerTimesFromAPI = async (lat, lng, offsets) => {
+        const fetchPrayerTimesFromAPI = async (lat, lng, offsets, method = 20) => {
             try {
-                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=20`); 
+                if (method === 'muhammadiyah') return null; 
+
+                const response = await fetch(`https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${lat}&longitude=${lng}&method=${method}`); 
                 if (!response.ok) throw new Error("Failed to fetch prayer times");
                 const data = await response.json();
                 const timings = data.data.timings;
@@ -363,7 +372,9 @@
                         iqamahDelay: 10,
                         prayerDuration: 10, 
                         fridayPrayerDuration: 30, 
-                        hijriAdjustment: 0 
+                        hijriAdjustment: 0,
+                        method: 20,
+                        timeCorrection: 0 // New: Manual time correction in minutes
                     },
                     location: { 
                         city: "Jakarta Pusat, DKI Jakarta", 
@@ -379,7 +390,7 @@
                         speed: 5, 
                         size: "medium" 
                     },
-                    audio: { isMuted: true },
+                    audio: { isMuted: false }, 
                     financials: { balance: 15000000, income: 4500000, expense: 1200000, lastUpdated: new Date().toISOString() },
                     fridayInfo: { khatib: "", imam: "", muadzin: "" },
                     slides: [
@@ -458,7 +469,7 @@
                         alert("Penyimpanan Lokal Penuh! Gambar yang Anda masukkan terlalu besar. Pengaturan tidak tersimpan. Harap hapus beberapa slide atau gunakan gambar yang lebih kecil.");
                     }
                 }
-                document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-x-hidden theme-${settings.general.theme}`;
+                document.body.className = `bg-background-dark text-slate-100 transition-colors duration-500 overflow-hidden theme-${settings.general.theme}`;
             }, [settings]);
 
             useEffect(() => {
@@ -468,46 +479,43 @@
                     if (isNaN(lat) || isNaN(lng)) return;
 
                     const todayStr = new Date().toDateString();
-                    // 1. Check local storage first (Offline Friendly)
                     const cachedTimings = localStorage.getItem('prayerTimings');
                     const cachedDate = localStorage.getItem('prayerDate');
+                    const method = settings.general.method || 20;
 
                     if (cachedTimings && cachedDate === todayStr) {
                          setTodaysTimings(JSON.parse(cachedTimings));
                     }
 
-                    // 2. Try Fetch Online
                     if (navigator.onLine) {
-                        const data = await fetchPrayerTimesFromAPI(lat, lng, settings.offsets);
+                        const data = await fetchPrayerTimesFromAPI(lat, lng, settings.offsets, method);
                         if (data) {
                             setTodaysTimings(data.timings);
-                            // Cache it
                             localStorage.setItem('prayerTimings', JSON.stringify(data.timings));
                             localStorage.setItem('prayerDate', todayStr);
                             return;
                         }
                     } 
                     
-                    // 3. Fallback to Calc if online failed and no cache or different date
                     if (!cachedTimings || cachedDate !== todayStr) {
                         const today = new Date();
                         const tzOffset = -today.getTimezoneOffset() / 60; 
-                        const timings = PrayerCalc.getTimes(today, lat, lng, tzOffset, settings.offsets);
+                        const timings = PrayerCalc.getTimes(today, lat, lng, tzOffset, settings.offsets, method);
                         setTodaysTimings(timings);
                     }
                 };
                 getTimings();
-            }, [settings.location.lat, settings.location.lng, settings.offsets]);
+            }, [settings.location.lat, settings.location.lng, settings.offsets, settings.general.method, settings.general.timeCorrection]);
 
             useEffect(() => {
                 if (!todaysTimings) return;
                 const updateHijri = () => {
-                    const now = new Date();
+                    const now = getCorrectedDate(settings.general.timeCorrection);
                     const [h, m] = todaysTimings.Maghrib.split(':').map(Number);
-                    const maghribTime = new Date();
+                    const maghribTime = getCorrectedDate(settings.general.timeCorrection);
                     maghribTime.setHours(h, m, 0, 0);
 
-                    const hijriBaseDate = new Date();
+                    const hijriBaseDate = getCorrectedDate(settings.general.timeCorrection);
                     if (now >= maghribTime) {
                         hijriBaseDate.setDate(hijriBaseDate.getDate() + 1);
                     }
@@ -527,23 +535,16 @@
                 updateHijri();
                 const interval = setInterval(updateHijri, 60000);
                 return () => clearInterval(interval);
-            }, [todaysTimings, settings.general.hijriAdjustment]);
+            }, [todaysTimings, settings.general.hijriAdjustment, settings.general.timeCorrection]);
 
             const updateSettings = (section, key, value) => {
                 setSettings(prev => {
-                    if (section === 'root') { return { ...prev, [key]: value }; }
-                    if (section === 'offsets') { return { ...prev, offsets: { ...prev.offsets, [key]: value } }; }
-                    if (section === 'financials') { return { ...prev, financials: { ...prev.financials, [key]: value, lastUpdated: new Date().toISOString() } }; }
-                    if (section === 'fridayInfo') { return { ...prev, fridayInfo: { ...prev.fridayInfo, [key]: value } }; }
+                    if (section === 'root') return { ...prev, [key]: value };
+                    if (section === 'slides') return { ...prev, slides: value === undefined ? key : value };
+                    if (section === 'location') return { ...prev, location: { ...prev.location, [key]: value } };
                     
-                    if (section === 'slides') { 
-                        const newValue = value === undefined ? key : value;
-                        return { ...prev, slides: newValue }; 
-                    }
-                    
-                    if (section === 'location') {
-                         return { ...prev, location: { ...prev.location, [key]: value } };
-                    }
+                    // Handle General settings (nested) including new timeCorrection
+                    if (section === 'general') return { ...prev, general: { ...prev.general, [key]: value } };
                     
                     return { ...prev, [section]: { ...prev[section], [key]: value } };
                 });
@@ -573,12 +574,30 @@
         };
 
         // --- COMPONENTS ---
+        const StartOverlay = ({ onStart }) => (
+            <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center p-4">
+                <div className="bg-surface-dark p-8 rounded-2xl border border-white/10 text-center max-w-lg">
+                    <span className="material-symbols-outlined text-6xl text-accent mb-4 animate-bounce">play_circle</span>
+                    <h1 className="text-2xl font-bold text-white mb-2">Selamat Datang</h1>
+                    <p className="text-slate-400 mb-6">Klik tombol di bawah untuk memulai dashboard dan mengaktifkan suara adzan.</p>
+                    <button 
+                        onClick={onStart} 
+                        className="bg-primary hover:bg-secondary text-white font-bold py-3 px-8 rounded-full text-lg shadow-[0_0_20px_rgba(var(--color-primary),0.4)] transition-all transform hover:scale-105"
+                    >
+                        MULAI DASHBOARD
+                    </button>
+                </div>
+            </div>
+        );
+
         const ClockDisplay = memo(({ className, size = 'normal' }) => {
-            const [time, setTime] = useState(new Date());
+            const { settings } = useContext(SettingsContext);
+            const [time, setTime] = useState(getCorrectedDate(settings.general.timeCorrection));
+            
             useEffect(() => {
-                const timer = setInterval(() => setTime(new Date()), 1000);
+                const timer = setInterval(() => setTime(getCorrectedDate(settings.general.timeCorrection)), 500);
                 return () => clearInterval(timer);
-            }, []);
+            }, [settings.general.timeCorrection]);
             
             const timeClass = size === 'large' ? 'text-7xl md:text-8xl' : 'text-5xl md:text-6xl';
             
@@ -594,12 +613,16 @@
         });
 
         const PrayerCountdown = memo(({ targetDate, nextPrayerName, status }) => {
+            const { settings } = useContext(SettingsContext);
             const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
+            
             useEffect(() => {
                 if (!targetDate) return;
-                const timer = setInterval(() => {
-                    const now = new Date();
-                    const diff = targetDate - now;
+                
+                const updateCountdown = () => {
+                    const now = getCorrectedDate(settings.general.timeCorrection);
+                    const diff = targetDate.getTime() - now.getTime(); // Use getTime for precision
+                    
                     if (diff <= 0) {
                         setCountdown({ h: 0, m: 0, s: 0 });
                     } else {
@@ -608,9 +631,16 @@
                         const s = Math.floor((diff / 1000) % 60);
                         setCountdown({ h, m, s });
                     }
-                }, 1000);
+                };
+
+                // Initial call
+                updateCountdown();
+
+                // Use a slightly faster interval to prevent visual "stutter"
+                // 200ms ensures we catch the second change close to when it happens
+                const timer = setInterval(updateCountdown, 200);
                 return () => clearInterval(timer);
-            }, [targetDate]);
+            }, [targetDate, settings.general.timeCorrection]);
 
             const fmt = (n) => String(n).padStart(2, '0');
             const isIqamah = status === 'iqamah';
@@ -648,6 +678,21 @@
                     </div>
                 );
             }
+            
+            if (layout === 'modern-top') {
+                 return (
+                    <div className={`relative overflow-hidden rounded-xl border flex flex-col items-center justify-center p-2 transition-all duration-500 h-full
+                        ${active 
+                            ? (isIqamahWaiting 
+                                ? 'border-red-500 bg-gradient-to-b from-red-900/90 to-red-950/90 shadow-[0_0_15px_rgba(239,68,68,0.3)] z-10 scale-105' 
+                                : 'border-accent bg-gradient-to-b from-secondary/90 to-surface-dark/90 shadow-[0_0_15px_rgba(var(--color-accent),0.2)] z-10 scale-105') 
+                            : 'border-white/10 bg-black/20 hover:bg-black/40'}`}>
+                        <span className={`text-[10px] lg:text-xs font-bold uppercase tracking-widest mb-0.5 ${active ? 'text-accent' : 'text-slate-400'}`}>{name}</span>
+                        <span className={`text-lg lg:text-2xl font-bold font-serif ${active ? 'text-white' : 'text-slate-200'}`}>{time}</span>
+                         {isIqamahWaiting && <span className="text-[9px] uppercase font-bold text-red-400 animate-pulse">Iqomah</span>}
+                    </div>
+                );
+            }
 
             return (
                 <div className={`relative overflow-hidden rounded-xl border transition-all duration-500 group 
@@ -659,10 +704,10 @@
                     
                     {active && <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent to-transparent ${isIqamahWaiting ? 'via-red-500' : 'via-accent'}`}></div>}
                     
-                    <div className="p-5 flex flex-col items-center text-center relative z-10">
-                        <span className={`text-sm font-bold uppercase tracking-widest mb-2 ${active ? (isIqamahWaiting ? 'text-red-300' : 'text-accent') : 'text-slate-400 group-hover:text-slate-300'}`}>{name}</span>
-                        <span className={`text-2xl sm:text-3xl font-serif font-bold ${active ? 'text-white' : 'text-slate-200'}`}>{time}</span>
-                        {isIqamahWaiting && <span className="text-[10px] uppercase font-bold text-red-400 mt-1 animate-pulse">Menunggu Iqomah</span>}
+                    <div className="p-3 flex flex-col items-center text-center relative z-10 h-full justify-center">
+                        <span className={`text-xs sm:text-sm font-bold uppercase tracking-widest mb-1 ${active ? (isIqamahWaiting ? 'text-red-300' : 'text-accent') : 'text-slate-400 group-hover:text-slate-300'}`}>{name}</span>
+                        <span className={`text-xl sm:text-2xl font-serif font-bold ${active ? 'text-white' : 'text-slate-200'}`}>{time}</span>
+                        {isIqamahWaiting && <span className="text-[10px] uppercase font-bold text-red-400 mt-0.5 animate-pulse">Menunggu Iqomah</span>}
                     </div>
                     <div className="absolute inset-0 bg-islamic-pattern opacity-5 pointer-events-none"></div>
                 </div>
@@ -678,14 +723,14 @@
             const todaysHadith = HADITH_COLLECTION[day % HADITH_COLLECTION.length];
 
             return (
-                <div className="lg:col-span-2 rounded-2xl bg-gradient-to-br from-surface-dark/95 to-background-dark/95 backdrop-blur-sm p-6 border border-white/10 flex items-center gap-6 h-full">
-                    <div className="hidden sm:flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent border border-accent/20">
-                        <span className="material-symbols-outlined text-3xl">menu_book</span>
+                <div className="lg:col-span-2 rounded-2xl bg-gradient-to-br from-surface-dark/95 to-background-dark/95 backdrop-blur-sm p-4 border border-white/10 flex items-center gap-4 h-full">
+                    <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent border border-accent/20">
+                        <span className="material-symbols-outlined text-2xl">menu_book</span>
                     </div>
-                    <div>
-                        <h4 className="text-sm font-bold uppercase text-accent mb-2">Hadits Hari Ini</h4>
-                        <p className="text-lg font-medium text-white italic leading-relaxed">"{todaysHadith.text}"</p>
-                        <p className="mt-2 text-sm text-slate-400">— {todaysHadith.source}</p>
+                    <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold uppercase text-accent mb-1">Hadits Hari Ini</h4>
+                        <p className="text-sm font-medium text-white italic leading-relaxed truncate">{todaysHadith.text}</p>
+                        <p className="mt-1 text-[10px] text-slate-400">— {todaysHadith.source}</p>
                     </div>
                 </div>
             );
@@ -694,29 +739,28 @@
         const InfaqWidget = memo(({ financials }) => {
             const dateStr = financials.lastUpdated ? new Date(financials.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
             return (
-                <div className="rounded-2xl bg-surface-dark/95 backdrop-blur-sm p-5 border border-white/10 flex flex-col justify-between h-full">
-                    <div className="flex justify-between items-center mb-3">
-                        <h4 className="text-sm font-bold uppercase text-accent flex items-center gap-2">
-                            <span className="material-symbols-outlined text-lg">account_balance_wallet</span>
+                <div className="rounded-2xl bg-surface-dark/95 backdrop-blur-sm p-4 border border-white/10 flex flex-col justify-between h-full">
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-xs font-bold uppercase text-accent flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">account_balance_wallet</span>
                             Infaq & Sedekah
                         </h4>
                     </div>
-                    <div className="flex flex-col gap-4">
-                         <div className="bg-black/20 rounded-xl p-3 border border-white/5">
-                            <p className="text-xs text-slate-400 mb-1">Total Saldo</p>
-                            <p className="text-2xl font-bold text-white font-serif">{formatRupiah(financials.balance)}</p>
+                    <div className="flex flex-col gap-2">
+                         <div className="bg-black/20 rounded-lg p-2 border border-white/5">
+                            <p className="text-[10px] text-slate-400 mb-0.5">Total Saldo</p>
+                            <p className="text-lg font-bold text-white font-serif">{formatRupiah(financials.balance)}</p>
                          </div>
-                         <div className="grid grid-cols-2 gap-3">
+                         <div className="grid grid-cols-2 gap-2">
                             <div className="flex flex-col">
-                                <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold uppercase mb-1"><span className="material-symbols-outlined text-sm">arrow_upward</span> Masuk</div>
-                                <span className="text-lg font-bold text-slate-200">{formatRupiah(financials.income)}</span>
+                                <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold uppercase"><span className="material-symbols-outlined text-[10px]">arrow_upward</span> Masuk</div>
+                                <span className="text-xs font-bold text-slate-200">{formatRupiah(financials.income)}</span>
                             </div>
                             <div className="flex flex-col">
-                                <div className="flex items-center gap-1 text-red-400 text-xs font-bold uppercase mb-1"><span className="material-symbols-outlined text-sm">arrow_downward</span> Keluar</div>
-                                <span className="text-lg font-bold text-slate-200">{formatRupiah(financials.expense)}</span>
+                                <div className="flex items-center gap-1 text-red-400 text-[10px] font-bold uppercase"><span className="material-symbols-outlined text-[10px]">arrow_downward</span> Keluar</div>
+                                <span className="text-xs font-bold text-slate-200">{formatRupiah(financials.expense)}</span>
                             </div>
                          </div>
-                         <div className="text-[10px] text-slate-500 text-right mt-1 italic">Data per: {dateStr}</div>
                     </div>
                 </div>
             );
@@ -838,8 +882,8 @@
             const displayText = texts.join(" ••• ");
 
             return (
-                <div className="fixed bottom-0 left-0 right-0 z-[120] bg-surface-dark backdrop-blur-md border-t border-white/10 h-12 flex items-center overflow-hidden shadow-2xl">
-                    <div className="flex items-center justify-center bg-accent text-black font-bold px-6 h-full shrink-0 z-10 text-sm uppercase tracking-wider shadow-lg">Info Masjid</div>
+                <div className="fixed bottom-0 left-0 right-0 z-[120] bg-surface-dark backdrop-blur-md border-t border-white/10 h-10 flex items-center overflow-hidden shadow-2xl">
+                    <div className="flex items-center justify-center bg-accent text-black font-bold px-4 h-full shrink-0 z-10 text-xs uppercase tracking-wider shadow-lg">Info Masjid</div>
                     <div className="flex-1 overflow-hidden relative h-full flex items-center">
                         <div className="whitespace-nowrap absolute flex items-center gap-8" style={{ animation: `marquee ${Math.max(5, duration)}s linear infinite` }}>
                            <span className={`${fontSizeClass} font-medium text-white tracking-wide font-arabic`}>{displayText}</span>
@@ -854,65 +898,92 @@
         // --- LAYOUTS ---
 
         const ClassicLayout = ({ settings, hijriDate, infoWidget, renderCentralArea, displayPrayers, nextPrayer }) => (
-            <div className="flex flex-col gap-12">
-                <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 pb-8 border-b border-white/10">
-                    <div className="flex flex-col gap-2 text-center md:text-left">
-                        <div className="flex items-center justify-center md:justify-start gap-2 text-accent"><span className="material-symbols-outlined">calendar_month</span><span className="text-lg font-bold tracking-widest uppercase">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-                        <p className="text-2xl font-serif text-slate-100">{hijriDate || "Memuat Tanggal Hijriah..."}</p>
+            <div className="flex flex-col h-full w-full p-4 gap-4 overflow-hidden">
+                {/* 1. Header (Fixed Height) */}
+                <div className="shrink-0 flex flex-col md:flex-row justify-between items-center border-b border-white/10 pb-2">
+                    <div className="text-center md:text-left">
+                        <div className="flex items-center justify-center md:justify-start gap-2 text-accent"><span className="material-symbols-outlined text-lg">calendar_month</span><span className="text-md font-bold tracking-widest uppercase">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+                        <p className="text-lg font-serif text-slate-100">{hijriDate || "Memuat..."}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-4 w-full md:w-auto"><ClockDisplay className="items-end" />{infoWidget}</div>
+                    <div className="flex flex-col items-end gap-1 w-full md:w-auto"><ClockDisplay className="items-end" />{infoWidget}</div>
                 </div>
-                <div className="h-[400px] flex items-center justify-center">{renderCentralArea()}</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {displayPrayers.map((p) => {
-                        const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
-                        return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} />;
-                    })}
+
+                {/* 2. Middle Content (Flexible) */}
+                <div className="flex-1 flex flex-col gap-4 min-h-0">
+                    {/* Central Display (Takes remaining space) */}
+                    <div className="flex-1 min-h-0 relative">
+                        {renderCentralArea()}
+                    </div>
+
+                    {/* Prayer Times (Fixed size) */}
+                    <div className="shrink-0">
+                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                            {displayPrayers.map((p) => {
+                                const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
+                                return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} />;
+                            })}
+                        </div>
+                    </div>
+                    
+                    {/* 3. Bottom Widgets (Fixed height or flexible but guaranteed visible) */}
+                    <div className="shrink-0 h-[25%] min-h-[140px]">
+                         <section className="grid grid-cols-1 lg:grid-cols-3 gap-2 h-full">
+                            <div className="lg:col-span-2 h-full min-h-0">
+                                <HadithSection />
+                            </div>
+                            <div className="lg:col-span-1 h-full min-h-0">
+                                <InfaqWidget financials={settings.financials || { balance: 0, income: 0, expense: 0 }} />
+                            </div>
+                        </section>
+                    </div>
                 </div>
-                <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <HadithSection />
-                    <InfaqWidget financials={settings.financials || { balance: 0, income: 0, expense: 0 }} />
-                </section>
             </div>
         );
 
         const ModernLayout = ({ settings, hijriDate, infoWidget, renderCentralArea, displayPrayers, nextPrayer }) => (
-            <div className="grid grid-cols-12 gap-6 h-full">
-                <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
-                    <div className="bg-surface-dark/90 backdrop-blur-md p-6 rounded-2xl border border-white/10 flex flex-col items-center text-center">
-                        <ClockDisplay className="items-center mb-4" />
-                        <div className="w-full h-px bg-white/10 my-4"></div>
-                        <p className="text-lg font-serif text-slate-200">{hijriDate}</p>
-                        <p className="text-sm text-slate-400 mt-1">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <div className="flex flex-col h-full gap-4 p-4 overflow-hidden">
+                {/* TOP SECTION: Clock & Prayer Times */}
+                <div className="shrink-0 flex flex-col lg:flex-row gap-4 h-auto">
+                    {/* Clock Widget */}
+                    <div className="lg:w-1/4 bg-surface-dark/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex flex-col justify-center items-center text-center shadow-lg">
+                        <ClockDisplay className="items-center" />
+                        <div className="w-full h-px bg-white/10 my-2"></div>
+                        <p className="text-sm font-serif text-slate-200">{hijriDate}</p>
+                        <div className="flex items-center justify-center gap-1 mt-1 text-[10px] text-slate-400">
+                             <span className="material-symbols-outlined text-[10px]">info</span>
+                             <span>{settings.general.method === 'muhammadiyah' ? 'Muhammadiyah' : 'Kemenag RI'}</span>
+                        </div>
                     </div>
-                    
-                    <div className="bg-surface-dark/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex-1 flex flex-col gap-2 overflow-y-auto">
-                        <h4 className="text-xs font-bold text-accent uppercase tracking-widest mb-2 text-center">Jadwal Sholat</h4>
+
+                    {/* Horizontal Prayer Cards */}
+                    <div className="lg:w-3/4 grid grid-cols-3 lg:grid-cols-6 gap-2">
                         {displayPrayers.map((p) => {
                             const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
-                            return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} layout="simple" />;
+                            // Reuse PrayerCard, slightly modified via props if needed, but standard works well
+                            return <PrayerCard key={p.name} name={p.name} time={p.time} active={isNext} status={nextPrayer ? nextPrayer.status : 'adhan'} layout="modern-top" />;
                         })}
                     </div>
                 </div>
 
-                <div className="col-span-12 lg:col-span-9 flex flex-col gap-6">
-                    <div className="flex-1 min-h-[400px] rounded-3xl overflow-hidden relative">
-                         {renderCentralArea()}
+                {/* MIDDLE SECTION: Main Slideshow */}
+                <div className="flex-1 min-h-0 rounded-3xl overflow-hidden relative shadow-2xl border border-white/5 bg-black/20">
+                     {renderCentralArea()}
+                </div>
+                
+                {/* BOTTOM SECTION: Widgets */}
+                <div className="shrink-0 h-32 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="lg:col-span-2 h-full">
+                         <HadithSection />
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
-                        <HadithSection />
-                        <div className="flex flex-col gap-4">
-                            {infoWidget}
-                            <div className="flex-1 bg-surface-dark/80 rounded-xl border border-white/10 p-4 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-emerald-500/20 p-2 rounded-lg text-emerald-400"><span className="material-symbols-outlined">account_balance_wallet</span></div>
-                                    <div>
-                                        <p className="text-xs text-slate-400 uppercase">Saldo Infaq</p>
-                                        <p className="text-xl font-bold font-mono text-white">{formatRupiah((settings.financials && settings.financials.balance) || 0)}</p>
-                                    </div>
-                                </div>
-                            </div>
+                    <div className="flex flex-col gap-2 h-full">
+                        {/* Info Widget and Infaq sharing column */}
+                        <div className="flex-1 overflow-hidden">{infoWidget}</div>
+                        <div className="flex-1 bg-surface-dark/80 rounded-xl border border-white/10 px-4 flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-emerald-400">account_balance_wallet</span>
+                                <span className="text-xs text-slate-400 uppercase font-bold">Saldo</span>
+                             </div>
+                             <p className="text-lg font-bold font-mono text-white truncate">{formatRupiah((settings.financials && settings.financials.balance) || 0)}</p>
                         </div>
                     </div>
                 </div>
@@ -920,22 +991,22 @@
         );
 
         const SimpleLayout = ({ settings, hijriDate, infoWidget, renderCentralArea, displayPrayers, nextPrayer }) => (
-            <div className="flex flex-col h-full justify-between gap-8 py-10">
-                <div className="text-center">
-                    <h1 className="text-4xl font-bold font-serif text-white mb-2">{settings.general.mosqueName}</h1>
-                    <p className="text-xl text-slate-400">{settings.location.city} | {hijriDate}</p>
+            <div className="flex flex-col h-full justify-between gap-4 py-4 px-4 overflow-hidden">
+                <div className="text-center shrink-0">
+                    <h1 className="text-3xl font-bold font-serif text-white mb-1">{settings.general.mosqueName}</h1>
+                    <p className="text-lg text-slate-400">{settings.location.city} | {hijriDate}</p>
                 </div>
 
-                <div className="flex-1 flex items-center justify-center w-full max-w-5xl mx-auto gap-12">
+                <div className="flex-1 flex items-center justify-center w-full max-w-6xl mx-auto gap-8 min-h-0">
                     <div className="flex-1 flex justify-center">
                         <ClockDisplay className="items-center" size="large" />
                     </div>
-                    <div className="w-px h-64 bg-white/10 hidden md:block"></div>
-                    <div className="flex-1 flex flex-col gap-4 w-full">
+                    <div className="w-px h-48 bg-white/10 hidden md:block"></div>
+                    <div className="flex-1 flex flex-col gap-3 w-full">
                          {displayPrayers.map((p) => {
                             const isNext = nextPrayer && (nextPrayer.name === p.name || (nextPrayer.name === 'Fajr' && p.name === 'Subuh') || (nextPrayer.name === 'Sunrise' && p.name === 'Terbit'));
                             return (
-                                <div key={p.name} className={`flex justify-between items-center px-6 py-3 rounded-lg border-b border-white/5 ${isNext ? 'bg-accent text-black scale-105 shadow-lg' : 'text-slate-300'}`}>
+                                <div key={p.name} className={`flex justify-between items-center px-6 py-2 rounded-lg border-b border-white/5 ${isNext ? 'bg-accent text-black scale-105 shadow-lg' : 'text-slate-300'}`}>
                                     <span className="text-xl font-bold uppercase">{p.name}</span>
                                     <span className="text-2xl font-mono font-bold">{p.time}</span>
                                 </div>
@@ -944,18 +1015,18 @@
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-6 max-w-6xl mx-auto w-full text-center">
-                    <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                <div className="grid grid-cols-3 gap-4 max-w-6xl mx-auto w-full text-center shrink-0">
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/10">
                         <p className="text-xs text-slate-400 uppercase mb-1">Saldo Kas</p>
-                        <p className="text-xl font-bold">{formatRupiah((settings.financials && settings.financials.balance) || 0)}</p>
+                        <p className="text-lg font-bold">{formatRupiah((settings.financials && settings.financials.balance) || 0)}</p>
                     </div>
-                    <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/10">
                         <p className="text-xs text-slate-400 uppercase mb-1">Imam Jumat</p>
-                        <p className="text-xl font-bold">{(settings.fridayInfo && settings.fridayInfo.imam) || "-"}</p>
+                        <p className="text-lg font-bold">{(settings.fridayInfo && settings.fridayInfo.imam) || "-"}</p>
                     </div>
-                    <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/10">
                         <p className="text-xs text-slate-400 uppercase mb-1">Khatib Jumat</p>
-                        <p className="text-xl font-bold">{(settings.fridayInfo && settings.fridayInfo.khatib) || "-"}</p>
+                        <p className="text-lg font-bold">{(settings.fridayInfo && settings.fridayInfo.khatib) || "-"}</p>
                     </div>
                 </div>
             </div>
@@ -968,14 +1039,24 @@
             const [bgImage, setBgImage] = useState(settings.appearance.bgImage);
             const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
             const [nextPrayer, setNextPrayer] = useState(null);
+            const [hasInteracted, setHasInteracted] = useState(false); // New state for interaction
             
             const template = settings.general.template || 'classic'; 
             const isFriday = new Date().getDay() === 5;
             const today = new Date();
             today.setHours(0,0,0,0);
             const nextEvent = ISLAMIC_EVENTS_2025.filter(ev => new Date(ev.date) >= today).sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-            const adhanAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); // Use local base64 sound
-            const iqamahAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); // Use local base64 sound
+            const adhanAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); 
+            const iqamahAudioRef = useRef(new Audio(BEEP_AUDIO_BASE64)); 
+
+            // Function to handle start interaction
+            const handleStart = () => {
+                setHasInteracted(true);
+                // Try to play a silent sound to unlock audio
+                const audio = new Audio(BEEP_AUDIO_BASE64);
+                audio.volume = 0;
+                audio.play().catch(e => console.log("Audio unlock failed", e));
+            };
 
             useEffect(() => {
                 if (!todaysTimings) return;
@@ -998,6 +1079,18 @@
                         const iqamahTime = new Date(prayerTime.getTime() + iqamahDelay * 60000);
                         const prayerEndTime = new Date(iqamahTime.getTime() + prayerDuration * 60000);
                         const nowTs = now.getTime();
+                        
+                        // PRE-ADHAN REMINDER (10 Minutes Before)
+                        const reminderTime = new Date(prayerTime.getTime() - 10 * 60000); // 10 mins before
+                         if (!settings.audio.isMuted && name !== 'Sunrise') {
+                             if (Math.abs(nowTs - reminderTime.getTime()) < 1500) { 
+                                 // Play reminder sound (double beep effect)
+                                 adhanAudioRef.current.play().then(() => {
+                                     setTimeout(() => adhanAudioRef.current.play(), 500);
+                                 }).catch(e => console.log("Audio fail:", e)); 
+                             }
+                        }
+
                         if (!settings.audio.isMuted && name !== 'Sunrise') {
                              if (Math.abs(nowTs - prayerTime.getTime()) < 1500) { adhanAudioRef.current.play().catch(e => console.log("Audio fail:", e)); }
                         }
@@ -1016,9 +1109,26 @@
                         target.setHours(h, m, 0, 0);
                         status = 'adhan';
                     }
-                    setNextPrayer({ ...found, targetDate: target, status });
+                    
+                    // --- OPTIMIZATION FIX: Only update state if data actually changed ---
+                    setNextPrayer(prev => {
+                        // Check if previous state exists and is identical to new calculation
+                        if (prev && 
+                            prev.name === found.name && 
+                            prev.status === status && 
+                            prev.time === found.time &&
+                            prev.targetDate.getTime() === target.getTime()
+                        ) {
+                            return prev; // Return SAME object reference to prevent re-render
+                        }
+                        // If different, return NEW object
+                        return { ...found, targetDate: target, status };
+                    });
                 };
+
+                // Run calculation immediately
                 calculateNextPrayer();
+                // Set interval for updates
                 const interval = setInterval(calculateNextPrayer, 1000); 
                 return () => clearInterval(interval);
             }, [todaysTimings, settings.general.iqamahDelay, settings.audio.isMuted, settings.general.prayerDuration, settings.general.fridayPrayerDuration, isFriday]);
@@ -1033,7 +1143,7 @@
                     }
                 }
                 if (isCritical) {
-                    setCurrentSlideIndex(0); // Force clock on critical times
+                    setCurrentSlideIndex(0); 
                     return;
                 }
                 const slides = settings.slides || [{ type: 'clock', duration: 15 }];
@@ -1048,12 +1158,11 @@
             const currentSlide = (settings.slides || [])[currentSlideIndex % (settings.slides || []).length] || { type: 'clock' };
 
             const renderCentralArea = () => {
-                // For clock type, render standard clock in central area
                 if (currentSlide.type === 'clock') {
                     return (
-                         <div className={`relative glass-panel rounded-3xl p-10 md:p-14 text-center shadow-2xl overflow-hidden group transition-colors duration-500 animate-fade-in h-full flex flex-col justify-center ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
+                         <div className={`relative glass-panel rounded-3xl p-6 md:p-10 text-center shadow-2xl overflow-hidden group transition-colors duration-500 animate-fade-in h-full flex flex-col justify-center ${(nextPrayer && nextPrayer.status === 'iqamah') ? 'border-red-500/50 bg-red-900/20' : ''}`}>
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-24 bg-gradient-to-b from-white/5 to-transparent rounded-b-full blur-xl pointer-events-none"></div>
-                            <div className="relative z-10 flex flex-col items-center gap-8">
+                            <div className="relative z-10 flex flex-col items-center gap-6">
                                 {nextPrayer ? (
                                     <React.Fragment>
                                         <PrayerCountdown targetDate={nextPrayer.targetDate} nextPrayerName={nextPrayer.name === 'Sunrise' ? 'Terbit' : nextPrayer.name} status={nextPrayer.status} />
@@ -1064,7 +1173,6 @@
                         </div>
                     );
                 }
-                // For other types, return empty div as they will be handled by Full Screen Overlay
                 return null;
             };
 
@@ -1079,11 +1187,10 @@
                 );
             }
 
-            // PRIORITY 2: FULL SCREEN SLIDESHOW (FLYER / KAJIAN / FINANCIAL)
+            // PRIORITY 2: FULL SCREEN SLIDESHOW
             if (currentSlide.type !== 'clock') {
                 return (
                     <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col animate-fade-in">
-                        {/* Background for non-image slides */}
                         {currentSlide.type !== 'image' && (
                             <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url("${settings.appearance.bgImage}")` }}></div>
                         )}
@@ -1119,7 +1226,6 @@
                             )}
                         </div>
 
-                        {/* Always show Running Text at bottom */}
                         <div className="shrink-0 z-20">
                              <RunningTextBanner active={settings.runningText.active} texts={settings.runningText.texts} speed={settings.runningText.speed} size={settings.runningText.size} />
                         </div>
@@ -1135,23 +1241,24 @@
             const infoWidget = isFriday ? <FridayWidget fridayInfo={settings.fridayInfo || {}} /> : <NextEventWidget nextEvent={nextEvent} />;
 
             return (
-                <div className="relative z-10 flex min-h-screen w-full flex-col overflow-x-hidden font-display pb-16 text-white">
+                <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden font-display pb-12 text-white">
+                     {!hasInteracted && <StartOverlay onStart={handleStart} />}
                     <div className="fixed inset-0 z-0 bg-black">
                         <div className="absolute inset-0 bg-cover bg-center transition-all duration-[2000ms]" style={{ backgroundImage: `url("${settings.appearance.bgImage}")`, filter: `blur(${settings.appearance.blur}px)` }}></div>
                         <div className="absolute inset-0 bg-gradient-to-b from-surface-dark/80 via-background-dark/60 to-surface-dark/90" style={{ opacity: settings.appearance.opacity / 100 }}></div>
                         <div className="absolute inset-0 bg-islamic-pattern opacity-10"></div>
                     </div>
-                    <div className="relative z-10 flex flex-col min-h-screen">
+                    <div className="relative z-10 flex flex-col h-full">
                         {template !== 'simple' && (
-                            <header className="w-full border-b border-white/10 bg-gradient-to-b from-surface-dark/90 to-transparent backdrop-blur-sm">
-                                <div className="px-6 lg:px-12 py-5 flex items-center justify-between">
+                            <header className="w-full border-b border-white/10 bg-gradient-to-b from-surface-dark/90 to-transparent backdrop-blur-sm shrink-0">
+                                <div className="px-6 lg:px-12 py-3 flex items-center justify-between">
                                     <div className="flex items-center gap-4">
-                                        <div className="flex items-center justify-center size-12 rounded-xl bg-accent/10 text-accent border border-accent/30 shadow-[0_0_15px_rgba(var(--color-accent),0.3)]"><span className="material-symbols-outlined text-3xl">mosque</span></div>
-                                        <div className="flex flex-col"><h2 className="text-xl font-bold tracking-tight text-white font-serif">{settings.general.mosqueName}</h2><p className="text-xs text-primary/80 tracking-wider uppercase">Prayer Dashboard</p></div>
+                                        <div className="flex items-center justify-center size-10 rounded-xl bg-accent/10 text-accent border border-accent/30 shadow-[0_0_15px_rgba(var(--color-accent),0.3)]"><span className="material-symbols-outlined text-2xl">mosque</span></div>
+                                        <div className="flex flex-col"><h2 className="text-lg font-bold tracking-tight text-white font-serif">{settings.general.mosqueName}</h2><p className="text-[10px] text-primary/80 tracking-wider uppercase">Prayer Dashboard</p></div>
                                     </div>
-                                    <div className="hidden md:flex items-center gap-6">
-                                         <button onClick={toggleMute} className={`flex items-center justify-center size-10 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}><span className="material-symbols-outlined">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span></button>
-                                        <Link to="/settings" className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-accent/50 transition-all group"><span className="material-symbols-outlined text-accent group-hover:animate-spin">settings</span><span className="text-sm font-medium">{settings.location.city}</span></Link>
+                                    <div className="hidden md:flex items-center gap-4">
+                                         <button onClick={toggleMute} className={`flex items-center justify-center size-8 rounded-full border border-white/10 transition-colors ${settings.audio.isMuted ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-primary/20 text-primary hover:bg-primary/30'}`} title={settings.audio.isMuted ? "Unmute Sound" : "Mute Sound"}><span className="material-symbols-outlined text-lg">{settings.audio.isMuted ? 'volume_off' : 'volume_up'}</span></button>
+                                        <Link to="/settings" className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-accent/50 transition-all group"><span className="material-symbols-outlined text-accent group-hover:animate-spin text-lg">settings</span><span className="text-xs font-medium">{settings.location.city}</span></Link>
                                     </div>
                                 </div>
                             </header>
@@ -1161,8 +1268,8 @@
                              <Link to="/settings" className="fixed top-4 right-4 z-50 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all"><span className="material-symbols-outlined">settings</span></Link>
                         )}
 
-                        <main className="flex-1 px-4 sm:px-8 lg:px-12 py-8 flex flex-col justify-center">
-                            <div className="mx-auto max-w-7xl w-full h-full">
+                        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 flex flex-col justify-center overflow-hidden">
+                            <div className="mx-auto max-w-7xl w-full h-full flex flex-col">
                                 {template === 'modern' ? (
                                     <ModernLayout 
                                         settings={settings} 
@@ -1362,19 +1469,35 @@
             };
 
             return (
-                <div className="bg-background-dark font-display min-h-screen flex flex-col text-white">
-                    <header className="border-b border-white/10 px-6 py-4 bg-surface-dark flex items-center justify-between sticky top-0 z-50">
+                <div className="bg-background-dark font-display h-screen flex flex-col text-white overflow-hidden">
+                    <header className="border-b border-white/10 px-6 py-4 bg-surface-dark flex items-center justify-between shrink-0">
                         <h2 className="text-xl font-bold font-serif text-accent">Pengaturan</h2>
                         <button onClick={() => navigate('/')} className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg">Simpan & Kembali</button>
                     </header>
-                    <main className="flex-1 p-6 md:p-10 max-w-4xl mx-auto w-full flex flex-col gap-8">
+                    <main className="flex-1 overflow-y-auto p-6 md:p-10 w-full">
+                        <div className="max-w-4xl mx-auto flex flex-col gap-8 pb-10">
                         <section className="bg-surface-dark border border-white/5 rounded-2xl p-6">
                             <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2"><span className="material-symbols-outlined">settings</span>Umum</h3>
                             <div className="flex flex-col gap-4">
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Nama Masjid</span><input className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.mosqueName} onChange={(e) => updateSettings('general', 'mosqueName', e.target.value)} placeholder="Contoh: Masjid Al-Ikhlas"/></label>
+                                
+                                {/* NEW: Calculation Method Selection */}
+                                <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Metode Perhitungan</span>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors"
+                                        value={settings.general.method || 20}
+                                        onChange={(e) => updateSettings('general', 'method', e.target.value === 'muhammadiyah' ? 'muhammadiyah' : parseInt(e.target.value))}
+                                    >
+                                        <option value="20">Kemenag RI (Subuh 20°)</option>
+                                        <option value="muhammadiyah">Muhammadiyah (Subuh 18°)</option>
+                                    </select>
+                                    <p className="text-[10px] text-slate-500">Pilih 'Kemenag RI' untuk standar pemerintah atau 'Muhammadiyah' untuk kriteria Tarjih terbaru.</p>
+                                </label>
+
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Jeda Iqomah (Menit)</span><input type="number" min="1" max="60" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.iqamahDelay} onChange={(e) => updateSettings('general', 'iqamahDelay', parseInt(e.target.value) || 10)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Durasi Mode Sholat Jumat (Menit)</span><input type="number" min="1" max="120" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.fridayPrayerDuration || 30} onChange={(e) => updateSettings('general', 'fridayPrayerDuration', parseInt(e.target.value) || 30)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Durasi Mode Sholat (Menit)</span><input type="number" min="1" max="60" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.prayerDuration || 10} onChange={(e) => updateSettings('general', 'prayerDuration', parseInt(e.target.value) || 10)} /></label>
+                                <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Koreksi Waktu (Menit)</span><input type="number" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.timeCorrection || 0} onChange={(e) => updateSettings('general', 'timeCorrection', parseInt(e.target.value) || 0)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Koreksi Tanggal Hijriah (Hari)</span><input type="number" min="-2" max="2" className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus:border-accent outline-none transition-colors" value={settings.general.hijriAdjustment || 0} onChange={(e) => updateSettings('general', 'hijriAdjustment', parseInt(e.target.value) || 0)} /></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Tema Warna</span><div className="flex gap-4 flex-wrap">{themes.map(theme => (<button key={theme.id} onClick={() => updateSettings('general', 'theme', theme.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full border ${settings.general.theme === theme.id ? 'border-accent bg-white/10' : 'border-white/10 bg-transparent'} transition-all`}><div className="w-4 h-4 rounded-full" style={{backgroundColor: theme.color}}></div><span className="text-sm">{theme.name}</span></button>))}</div></label>
                                 <label className="flex flex-col gap-2"><span className="text-sm font-medium text-slate-300">Template Tampilan</span><div className="flex gap-4 flex-wrap">{templates.map(tmpl => (<button key={tmpl.id} onClick={() => updateSettings('general', 'template', tmpl.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${settings.general.template === tmpl.id ? 'border-accent bg-white/10 text-accent' : 'border-white/10 bg-transparent text-slate-400'} transition-all`}><span className="material-symbols-outlined">{tmpl.icon}</span><span className="text-sm">{tmpl.name}</span></button>))}</div></label>
@@ -1569,6 +1692,7 @@
                              </div>
                              <p className="text-10px text-slate-500 mt-4 text-center">* Data ini anonim dan hanya mencatat jika pengguna mengaktifkan fitur lokasi otomatis.</p>
                         </section>
+                        </div>
                     </main>
                 </div>
             );
