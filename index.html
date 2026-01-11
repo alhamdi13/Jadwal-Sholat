@@ -311,7 +311,8 @@
             const [user, setUser] = useState(null);
             const [isOnline, setIsOnline] = useState(navigator.onLine);
             const [settings, setSettings] = useState(() => {
-                const saved = localStorage.getItem('muslimProSettings_v11_logo'); // Updated key version
+                // UPDATE KEY KE V12 AGAR LOGO BARU TERLOAD OTOMATIS
+                const saved = localStorage.getItem('muslimProSettings_v12_logo'); 
                 const defaultSettings = {
                     general: { 
                         mosqueName: "Masjid Al-Multazam", 
@@ -328,7 +329,8 @@
                     appearance: { 
                         theme: 'royal-gold', 
                         bgImage: "https://images.unsplash.com/photo-1519817650390-64a93db51149?q=80&w=2574&auto=format&fit=crop",
-                        logo: "" // Default logo kosong
+                        // UPDATE DEFAULT LOGO
+                        logo: "https://i.ibb.co.com/0j8HzYQX/Gemini-Generated-Image-docknfdocknfdock.png" 
                     },
                     runningText: { active: true, texts: ["Selamat Datang di Masjid", "Luruskan dan Rapatkan Shaf"] },
                     financials: { balance: 0, income: 0, expense: 0 },
@@ -367,7 +369,7 @@
 
             useEffect(() => {
                 document.body.className = `bg-background-dark text-text-main transition-colors duration-500 theme-${settings.appearance.theme}`;
-                localStorage.setItem('muslimProSettings_v11_logo', JSON.stringify(settings)); // Updated key version
+                localStorage.setItem('muslimProSettings_v12_logo', JSON.stringify(settings)); // Updated key version
             }, [settings]);
 
             useEffect(() => {
@@ -446,44 +448,49 @@
         // --- COMPONENTS ---
         const NoSleepHelper = () => {
             useEffect(() => {
-                // 1. Video Loop Hack (Simulates playback)
-                // This is a 1x1 pixel black MP4 video in base64
+                // STRATEGI 1: Video Loop "Hantu" yang lebih agresif
+                // Menggunakan video hitam 10 detik base64
                 const video = document.createElement('video');
                 video.src = "data:video/mp4;base64,AAAAHGZ0eXBNNGEgAAACAFM0QgenZ0eXBNNGEgAAAAZnJlZQAACjBtZGF0AAAACgb//4AF//7/AAACABJtb292AAAAIG12aGQAAAAA45XyTuOV8k4AAQAAAQAAAQAAAAEAAAEcbXRyYQAAABx0cmVrAAAAA+OV8k7jlfJOAAAAAQAAAAEAAAEUbWRpYQAAACBtZGhkAAAAAOOV8k7jlfJOAAABAAAAAQAAAAEAAAAHKWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAAAAABRtaW5mAAAAFHZtaGQwAAAAAQAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAABMHN0YmwAAACkc3RzZAAAAAAAAAABAAAAhGF2YzEAAAAAAAAAAQAAAAEAAAABAAAAAAACAEgAAABIAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAAMWF2Y0MBAQAAAAEAAgACAAAAKEB2Y1MAAAAAAAEAAQAAABZzdHRzAAAAAAAAAAEAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3R6MgAAAAAAAAABAAAAAQAAABRzdGNvAAAAAAAAAAEAAAABAAAADHVkbHAAAAAAbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpYQAAAAAAAAAAAAAAAAAAAAA6aWxzdAAAADJkYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
                 video.setAttribute('playsinline', '');
                 video.setAttribute('loop', '');
                 video.setAttribute('muted', '');
+                video.setAttribute('autoplay', '');
+                
+                // PENTING: Jangan hide total (display:none) atau ukuran 0px
+                // TV pintar akan mengabaikannya. Buat transparan tapi "ada".
                 video.style.position = 'fixed';
-                video.style.top = '0';
-                video.style.left = '0';
-                video.style.width = '1px';
-                video.style.height = '1px';
-                video.style.opacity = '0.01';
+                video.style.bottom = '0';
+                video.style.right = '0';
+                video.style.width = '10px'; 
+                video.style.height = '10px';
+                video.style.opacity = '0.01'; // Hampir tidak terlihat tapi dirender
+                video.style.zIndex = '9999';
                 video.style.pointerEvents = 'none';
                 document.body.appendChild(video);
                 
-                // Try to play on interaction
                 const playVideo = () => {
-                    video.play().catch(e => console.log("Auto-play blocked", e));
+                    if(video.paused) {
+                        video.play().catch(e => console.log("Auto-play blocked", e));
+                    }
                 };
-                document.addEventListener('click', playVideo);
-                document.addEventListener('touchstart', playVideo);
-                document.addEventListener('keydown', playVideo);
 
-                // 2. Wake Lock API (Newer devices)
+                // Pancing play saat ada interaksi apapun
+                ['click', 'touchstart', 'keydown', 'mousemove'].forEach(evt => 
+                    document.addEventListener(evt, playVideo, {once:true})
+                );
+                
+                // Paksa play interval (Heartbeat Video)
+                const videoInterval = setInterval(playVideo, 5000);
+
+                // STRATEGI 2: Wake Lock API (Untuk Browser Modern/Android TV)
                 let wakeLock = null;
                 const requestWakeLock = async () => {
                     try {
                         if ('wakeLock' in navigator) {
                             wakeLock = await navigator.wakeLock.request('screen');
-                            wakeLock.addEventListener('release', () => {
-                                console.log('Wake Lock released');
-                            });
-                            console.log('Wake Lock active');
                         }
-                    } catch (err) {
-                        console.log('Wake Lock Error:', err);
-                    }
+                    } catch (err) { console.log('Wake Lock Error:', err); }
                 };
                 requestWakeLock();
                 document.addEventListener('visibilitychange', () => {
@@ -492,10 +499,17 @@
                     }
                 });
 
+                // STRATEGI 3: Auto Refresh Berkala (PENTING UNTUK TV MEMORY KECIL)
+                // Refresh halaman setiap 60 menit untuk mencegah browser crash/out of memory
+                // yang sering menyebabkan TV menganggap "tidak ada sinyal" lalu mati.
+                const refreshInterval = setInterval(() => {
+                    console.log("Melakukan refresh berkala untuk menjaga performa TV...");
+                    window.location.reload();
+                }, 60 * 60 * 1000); // 60 menit
+
                 return () => {
-                    document.removeEventListener('click', playVideo);
-                    document.removeEventListener('touchstart', playVideo);
-                    document.removeEventListener('keydown', playVideo);
+                    clearInterval(videoInterval);
+                    clearInterval(refreshInterval);
                     if(video) video.remove();
                 }
             }, []);
