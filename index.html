@@ -4,7 +4,7 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <meta name="referrer" content="no-referrer" />
-    <title>MuslimPro Dashboard - V9 TV Ready</title>
+    <title>MuslimPro Dashboard - V10 No Sleep</title>
     
     <!-- PWA Manifest untuk TV Browser -->
     <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIk11c2xpbVBybyBEYXNoYm9hcmQiLAogICJzaG9ydF9uYW1lIjogIk11c2xpbVBybyIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMDUwZTExIiwKICAidGhlbWVfY29sb3IiOiAiIzEwYjk4MSIKfQ==" />
@@ -87,7 +87,7 @@
             transition: background-color 0.5s ease, color 0.5s ease;
             cursor: none; /* Hide cursor for TV */
         }
-        /* Show cursor only when moving (optional, requires JS, but simple CSS hide is better for TV) */
+        /* Show cursor only when moving */
         body:hover { cursor: default; }
 
         /* --- THEME DEFINITIONS --- */
@@ -439,6 +439,64 @@
         };
 
         // --- COMPONENTS ---
+        const NoSleepHelper = () => {
+            useEffect(() => {
+                // 1. Video Loop Hack (Simulates playback)
+                // This is a 1x1 pixel black MP4 video in base64
+                const video = document.createElement('video');
+                video.src = "data:video/mp4;base64,AAAAHGZ0eXBNNGEgAAACAFM0QgenZ0eXBNNGEgAAAAZnJlZQAACjBtZGF0AAAACgb//4AF//7/AAACABJtb292AAAAIG12aGQAAAAA45XyTuOV8k4AAQAAAQAAAQAAAAEAAAEcbXRyYQAAABx0cmVrAAAAA+OV8k7jlfJOAAAAAQAAAAEAAAEUbWRpYQAAACBtZGhkAAAAAOOV8k7jlfJOAAABAAAAAQAAAAEAAAAHKWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAAAAABRtaW5mAAAAFHZtaGQwAAAAAQAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAABMHN0YmwAAACkc3RzZAAAAAAAAAABAAAAhGF2YzEAAAAAAAAAAQAAAAEAAAABAAAAAAACAEgAAABIAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAAMWF2Y0MBAQAAAAEAAgACAAAAKEB2Y1MAAAAAAAEAAQAAABZzdHRzAAAAAAAAAAEAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3R6MgAAAAAAAAABAAAAAQAAABRzdGNvAAAAAAAAAAEAAAABAAAADHVkbHAAAAAAbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpYQAAAAAAAAAAAAAAAAAAAAA6aWxzdAAAADJkYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+                video.setAttribute('playsinline', '');
+                video.setAttribute('loop', '');
+                video.setAttribute('muted', '');
+                video.style.position = 'fixed';
+                video.style.top = '0';
+                video.style.left = '0';
+                video.style.width = '1px';
+                video.style.height = '1px';
+                video.style.opacity = '0.01';
+                video.style.pointerEvents = 'none';
+                document.body.appendChild(video);
+                
+                // Try to play on interaction
+                const playVideo = () => {
+                    video.play().catch(e => console.log("Auto-play blocked", e));
+                };
+                document.addEventListener('click', playVideo);
+                document.addEventListener('touchstart', playVideo);
+                document.addEventListener('keydown', playVideo);
+
+                // 2. Wake Lock API (Newer devices)
+                let wakeLock = null;
+                const requestWakeLock = async () => {
+                    try {
+                        if ('wakeLock' in navigator) {
+                            wakeLock = await navigator.wakeLock.request('screen');
+                            wakeLock.addEventListener('release', () => {
+                                console.log('Wake Lock released');
+                            });
+                            console.log('Wake Lock active');
+                        }
+                    } catch (err) {
+                        console.log('Wake Lock Error:', err);
+                    }
+                };
+                requestWakeLock();
+                document.addEventListener('visibilitychange', () => {
+                    if (wakeLock !== null && document.visibilityState === 'visible') {
+                        requestWakeLock();
+                    }
+                });
+
+                return () => {
+                    document.removeEventListener('click', playVideo);
+                    document.removeEventListener('touchstart', playVideo);
+                    document.removeEventListener('keydown', playVideo);
+                    if(video) video.remove();
+                }
+            }, []);
+            return null;
+        };
+
         const StartOverlay = ({ onStart }) => (
             <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center p-4">
                 <div className="bg-surface-dark p-8 rounded-2xl border border-white/10 text-center max-w-lg">
@@ -680,6 +738,7 @@
             return (
                 <div className="relative h-screen w-full overflow-hidden bg-background-dark text-text-main flex flex-col">
                     {!hasInteracted && <StartOverlay onStart={handleStart} />}
+                    <NoSleepHelper />
                     <div className="absolute inset-0 z-0">
                         <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{backgroundImage:`url("${settings.appearance.bgImage}")`}}></div>
                         <div className="absolute inset-0 bg-background-dark/70"></div>
