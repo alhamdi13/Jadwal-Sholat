@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta name="referrer" content="no-referrer" />
     <title>MuslimPro Dashboard - V9 TV Ready</title>
     
     <!-- PWA Manifest untuk TV Browser -->
@@ -800,8 +801,13 @@
                     
                     if (!response.ok) {
                         const errData = await response.json();
-                        // Fix optional chaining here
-                        throw new Error((errData.error && errData.error.message) || "Gagal akses API.");
+                        const errMsg = (errData.error && errData.error.message) || "Gagal akses API.";
+                        
+                        if (errMsg.includes("referer") || errMsg.includes("blocked")) {
+                            throw new Error("API Key dibatasi (Referer Blocked). Harap set 'Application restrictions' ke 'None' di Google Cloud Console.");
+                        }
+                        
+                        throw new Error(errMsg);
                     }
                     
                     const data = await response.json();
@@ -839,7 +845,7 @@
                     setDriveMsg(`Sukses! ${newSlides.length} file berhasil ditambahkan.`);
                 } catch (error) {
                     console.error("Drive Error:", error);
-                    setDriveMsg("Gagal: " + error.message + " (Cek Console untuk detail)");
+                    setDriveMsg("Gagal: " + error.message);
                 } finally {
                     setIsFetchingDrive(false);
                 }
@@ -915,7 +921,7 @@
                                         <button onClick={fetchFromDrive} disabled={isFetchingDrive} className={`w-full py-2 rounded font-bold transition-all ${isFetchingDrive ? 'bg-white/10 text-white/50' : 'bg-accent text-black hover:bg-white'}`}>
                                             {isFetchingDrive ? 'Sedang Mengambil...' : 'Tarik Data dari Drive'}
                                         </button>
-                                        {driveMsg && <div className={`text-xs p-2 rounded ${driveMsg.includes('Error')?'bg-red-900/50 text-red-200':'bg-green-900/50 text-green-200'}`}>{driveMsg}</div>}
+                                        {driveMsg && <div className={`text-xs p-2 rounded ${driveMsg.includes('Error') || driveMsg.includes('Gagal') ? 'bg-red-900/50 text-red-200' : 'bg-green-900/50 text-green-200'}`}>{driveMsg}</div>}
                                     </div>
                                 </div>
 
